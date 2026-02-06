@@ -72,7 +72,7 @@ FlowState is built on proven cognitive and behavioral principles:
 
 | Layer | Technology |
 |------|-----------|
-| 💻 Frontend | React |
+| 💻 Frontend | HTML, CSS, JavaScript |
 | 🎨 UI / UX | Minimalist design, soft color palettes |
 | 🔥 Backend | Node.js + Express |
 | 🧠 Intelligence Layer | Rule-based + behavior analytics |
