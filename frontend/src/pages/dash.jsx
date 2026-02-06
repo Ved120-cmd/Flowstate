@@ -11,20 +11,21 @@ import {
   Layout, 
   Sparkles,
   X,
-  Battery,
   Sun,
   Coffee,
   Moon,
   Clock,
-  Calendar,
   Heart,
   Leaf,
-  Waves,
   BrainCircuit,
   Wind,
   Feather,
-  Cloud,
-  Droplets
+  Calendar,
+  Plus,
+  Play,
+  Pause,
+  Check,
+  Trash2
 } from 'lucide-react';
 import '../App.css';
 
@@ -33,6 +34,12 @@ const Dash = () => {
   const [showToast, setShowToast] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [nudgeIndex, setNudgeIndex] = useState(0);
+  const [showAddTask, setShowAddTask] = useState(false);
+  const [newTask, setNewTask] = useState({
+    title: '',
+    complexity: 'Medium',
+    duration: ''
+  });
   
   const nudges = [
     "Breathe deeply. This moment is yours to cherish.",
@@ -44,11 +51,43 @@ const Dash = () => {
     "Your pace is perfect. There's no need to rush."
   ];
 
-  const [tasks] = useState([
-    { id: 1, title: "Refactor API Logic", complexity: "High", status: "In Progress", duration: "2h" },
-    { id: 2, title: "Update Documentation", complexity: "Low", status: "Todo", duration: "45m" },
-    { id: 3, title: "Database Migration", complexity: "High", status: "Todo", duration: "3h" },
-    { id: 4, title: "Weekly Sync", complexity: "Medium", status: "Todo", duration: "1h" },
+  const [tasks, setTasks] = useState([
+    { 
+      id: 1, 
+      title: "Refactor API Logic", 
+      complexity: "High", 
+      status: "In Progress", 
+      duration: "2h",
+      startTime: new Date(Date.now() - 3600000),
+      isPaused: false
+    },
+    { 
+      id: 2, 
+      title: "Update Documentation", 
+      complexity: "Low", 
+      status: "Todo", 
+      duration: "45m",
+      startTime: null,
+      isPaused: false
+    },
+    { 
+      id: 3, 
+      title: "Database Migration", 
+      complexity: "High", 
+      status: "Todo", 
+      duration: "3h",
+      startTime: null,
+      isPaused: false
+    },
+    { 
+      id: 4, 
+      title: "Weekly Sync", 
+      complexity: "Medium", 
+      status: "Todo", 
+      duration: "1h",
+      startTime: null,
+      isPaused: false
+    },
   ]);
 
   const focusData = [
@@ -73,7 +112,7 @@ const Dash = () => {
       setNudgeIndex((prev) => (prev + 1) % nudges.length);
     }, 20000);
     return () => clearInterval(nudgeTimer);
-  }, []);
+  }, [nudges.length]);
 
   const handleAcceptSuggestion = () => {
     setShowToast(false);
@@ -86,13 +125,68 @@ const Dash = () => {
 
   const getTimeOfDay = () => {
     const hour = currentTime.getHours();
-    if (hour < 12) return { icon: Sun, text: 'Morning', color: '#e6b89c' };
+    if (hour < 12) return { icon: Sun, text: 'Morning', color: '#88c9a1' };
     if (hour < 17) return { icon: Coffee, text: 'Afternoon', color: '#b3a396' };
     return { icon: Moon, text: 'Evening', color: '#7fa8c9' };
   };
 
+  // Task Management Functions
+  const handleAddTask = () => {
+    if (newTask.title.trim() && newTask.duration.trim()) {
+      const task = {
+        id: Date.now(),
+        title: newTask.title,
+        complexity: newTask.complexity,
+        duration: newTask.duration,
+        status: 'Todo',
+        startTime: null,
+        isPaused: false
+      };
+      setTasks([...tasks, task]);
+      setNewTask({ title: '', complexity: 'Medium', duration: '' });
+      setShowAddTask(false);
+    }
+  };
+
+  const handleStartTask = (taskId) => {
+    setTasks(tasks.map(task => {
+      if (task.id === taskId) {
+        if (task.status === 'Todo') {
+          return { ...task, status: 'In Progress', startTime: new Date(), isPaused: false };
+        }
+      }
+      return task;
+    }));
+  };
+
+  const handlePauseTask = (taskId) => {
+    setTasks(tasks.map(task => {
+      if (task.id === taskId && task.status === 'In Progress') {
+        return { ...task, isPaused: !task.isPaused };
+      }
+      return task;
+    }));
+  };
+
+  const handleCompleteTask = (taskId) => {
+    setTasks(tasks.map(task => {
+      if (task.id === taskId) {
+        return { ...task, status: 'Completed' };
+      }
+      return task;
+    }));
+    setEnergy(prev => Math.min(prev + 3, 100));
+  };
+
+  const handleDeleteTask = (taskId) => {
+    setTasks(tasks.filter(task => task.id !== taskId));
+  };
+
   const timeOfDay = getTimeOfDay();
   const TimeIcon = timeOfDay.icon;
+
+  const activeTasks = tasks.filter(t => t.status !== 'Completed');
+  const completedTasks = tasks.filter(t => t.status === 'Completed');
 
   return (
     <div className="app-container">
@@ -132,7 +226,7 @@ const Dash = () => {
         <div className="header-greeting">
           <h1 className="header-title">Welcome back, Alex</h1>
           <div className="header-nudge">
-            <Heart className="nudge-icon" style={{ width: '16px', height: '16px', color: '#e6a2a2' }} />
+            <Heart className="nudge-icon" style={{ width: '16px', height: '16px', color: '#88c9a1' }} />
             {nudges[nudgeIndex]}
           </div>
           <div className="header-meta">
@@ -248,7 +342,7 @@ const Dash = () => {
             </div>
             <div className="suggestion-item blue">
               <div className="suggestion-icon-wrapper">
-                <Cloud className="suggestion-icon" />
+                <Calendar className="suggestion-icon" />
               </div>
               <div className="suggestion-content">
                 <div className="suggestion-title">Future Planning</div>
@@ -327,15 +421,62 @@ const Dash = () => {
             </div>
             <div className="header-text">
               <h3>Task Flow</h3>
-              <span className="header-badge">{tasks.length} pending</span>
+              <span className="header-badge">{activeTasks.length} active</span>
             </div>
+            <button className="add-task-btn" onClick={() => setShowAddTask(!showAddTask)}>
+              <Plus className="plus-icon" />
+              Add Task
+            </button>
           </div>
+
+          {/* ADD TASK FORM */}
+          {showAddTask && (
+            <div className="add-task-form">
+              <input
+                type="text"
+                placeholder="Task name..."
+                value={newTask.title}
+                onChange={(e) => setNewTask({...newTask, title: e.target.value})}
+                className="task-input"
+              />
+              <div className="form-row">
+                <select
+                  value={newTask.complexity}
+                  onChange={(e) => setNewTask({...newTask, complexity: e.target.value})}
+                  className="task-select"
+                >
+                  <option value="Low">Low</option>
+                  <option value="Medium">Medium</option>
+                  <option value="High">High</option>
+                </select>
+                <input
+                  type="text"
+                  placeholder="Duration (e.g., 2h)"
+                  value={newTask.duration}
+                  onChange={(e) => setNewTask({...newTask, duration: e.target.value})}
+                  className="task-input-small"
+                />
+              </div>
+              <div className="form-actions">
+                <button className="form-btn save" onClick={handleAddTask}>
+                  <Check size={14} />
+                  Save Task
+                </button>
+                <button className="form-btn cancel" onClick={() => setShowAddTask(false)}>
+                  <X size={14} />
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ACTIVE TASKS */}
           <div className="tasks-list">
-            {tasks.map(task => (
-              <div key={task.id} className="task-item">
+            {activeTasks.map(task => (
+              <div key={task.id} className={`task-item ${task.status === 'In Progress' ? 'active' : ''}`}>
                 <div className="task-left">
-                  <div className="task-checkbox">
-                    <div className="checkbox-inner"></div>
+                  <div className="task-checkbox" onClick={() => handleCompleteTask(task.id)}>
+                    {task.status === 'Completed' && <Check className="check-icon" size={14} />}
                   </div>
                   <div className="task-info">
                     <div className="task-title">{task.title}</div>
@@ -347,18 +488,70 @@ const Dash = () => {
                         <Clock className="duration-icon" />
                         {task.duration}
                       </span>
+                      {task.status === 'In Progress' && task.isPaused && (
+                        <span className="status-badge paused">Paused</span>
+                      )}
                     </div>
                   </div>
                 </div>
-                <button className="task-start-btn">
-                  <span>Begin</span>
-                  <svg className="btn-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <path d="M5 12h14M12 5l7 7-7 7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </button>
+                <div className="task-actions">
+                  {task.status === 'Todo' && (
+                    <button className="task-action-btn start" onClick={() => handleStartTask(task.id)}>
+                      <Play size={14} />
+                    </button>
+                  )}
+                  {task.status === 'In Progress' && (
+                    <>
+                      <button className="task-action-btn pause" onClick={() => handlePauseTask(task.id)}>
+                        {task.isPaused ? <Play size={14} /> : <Pause size={14} />}
+                      </button>
+                      <button className="task-action-btn complete" onClick={() => handleCompleteTask(task.id)}>
+                        <Check size={14} />
+                      </button>
+                    </>
+                  )}
+                  <button className="task-action-btn delete" onClick={() => handleDeleteTask(task.id)}>
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
+
+          {/* COMPLETED TASKS */}
+          {completedTasks.length > 0 && (
+            <div className="completed-section">
+              <div className="completed-header">
+                <span className="completed-title">Completed ({completedTasks.length})</span>
+              </div>
+              <div className="tasks-list">
+                {completedTasks.map(task => (
+                  <div key={task.id} className="task-item completed">
+                    <div className="task-left">
+                      <div className="task-checkbox checked">
+                        <Check className="check-icon" size={14} />
+                      </div>
+                      <div className="task-info">
+                        <div className="task-title">{task.title}</div>
+                        <div className="task-meta">
+                          <span className={`complexity-badge ${task.complexity.toLowerCase()}`}>
+                            {task.complexity}
+                          </span>
+                          <span className="task-duration">
+                            <Clock className="duration-icon" />
+                            {task.duration}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <button className="task-action-btn delete" onClick={() => handleDeleteTask(task.id)}>
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
       </div>
