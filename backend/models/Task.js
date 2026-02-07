@@ -17,7 +17,7 @@ const taskSchema = new mongoose.Schema(
 
     complexity: {
       type: String,
-      enum: ["LOW", "MEDIUM", "HIGH"],
+      enum: ["LOW", "MEDIUM", "HIGH", "Low", "High" , "Medium"],
       required: true,
     },
 

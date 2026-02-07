@@ -1,35 +1,28 @@
-//Logs events (idle, error, meeting mode, etc.)
-
 const express = require("express");
-const ActivityLog = require("../models/ActivityLog");
-const auth = require("../middleware/authMiddleware");
-
 const router = express.Router();
+const auth = require("../middleware/authMiddleware");
+const ActivityLog = require("../models/ActivityLog");
 
-// Log activity
-router.post("/", auth, async (req, res) => {
-  try {
-    const { type, metadata } = req.body;
+router.use(auth);
 
-    await ActivityLog.create({
-      userId: req.user.userId,
-      type,
-      metadata,
-    });
+/**
+ * Log user activity events
+ * type: MOUSE | KEYBOARD | ERROR
+ */
+router.post("/", async (req, res) => {
+  const { type, metadata } = req.body;
 
-    res.status(201).json({ message: "Activity logged" });
-  } catch {
-    res.status(500).json({ message: "Failed to log activity" });
+  if (!type) {
+    return res.status(400).json({ message: "Activity type required" });
   }
-});
 
-// Get recent activity
-router.get("/", auth, async (req, res) => {
-  const logs = await ActivityLog.find({ userId: req.user.userId })
-    .sort({ createdAt: -1 })
-    .limit(100);
+  await ActivityLog.create({
+    userId: req.userId,
+    type,
+    metadata
+  });
 
-  res.json(logs);
+  res.json({ message: "Activity logged" });
 });
 
 module.exports = router;

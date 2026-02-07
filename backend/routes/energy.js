@@ -1,26 +1,38 @@
 const express = require("express");
-const WorkSession = require("../models/WorkSession");
-const auth = require("../middleware/authMiddleware");
-
 const router = express.Router();
+const auth = require("../middleware/authMiddleware");
+const Energy = require("../models/Energy");
 
-// Update energy score (called by teammate logic)
-router.post("/update", auth, async (req, res) => {
-  const { energyScore } = req.body;
+router.use(auth);
 
-  const session = await WorkSession.findOne({
-    userId: req.user.userId,
-    endedAt: null,
-  });
+/**
+ * Log energy snapshot
+ */
+router.post("/", async (req, res) => {
+  const { level, source, reason } = req.body;
 
-  if (!session) {
-    return res.status(404).json({ message: "No active session" });
+  if (level === undefined) {
+    return res.status(400).json({ message: "Energy level required" });
   }
 
-  session.energyScore = energyScore;
-  await session.save();
+  await Energy.create({
+    userId: req.userId,
+    level,
+    source,
+    reason
+  });
 
-  res.json(session);
+  res.json({ message: "Energy logged" });
+});
+
+/**
+ * Get latest energy level
+ */
+router.get("/latest", async (req, res) => {
+  const latest = await Energy.findOne({ userId: req.userId })
+    .sort({ createdAt: -1 });
+
+  res.json(latest);
 });
 
 module.exports = router;

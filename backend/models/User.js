@@ -1,52 +1,25 @@
 const mongoose = require("mongoose");
 
-const userSchema = new mongoose.Schema(
-  {
-    email: {
-      type: String,
-      required: true,
-      unique: true,
-    },
-
-    name: {
-      type: String,
-      required: true,
-    },
-
-    workMode: {
-      type: String,
-      enum: ["WFH", "WFO", "HYBRID"],
-      required: true,
-    },
-
-    workStart: String,
-    workEnd: String,
-
-    taskComplexityBaseline: {
-      type: String,
-      enum: ["LOW", "MIXED", "HIGH"],
-      required: true,
-    },
-
-    workStyle: {
-      type: String,
-      enum: ["DEEP_FOCUS", "TASK_SWITCHING", "BALANCED"],
-      required: true,
-    },
-
-    workdayFeeling: {
-      type: String,
-      enum: ["CALM", "BALANCED", "HIGH_OUTPUT"],
-      required: true,
-    },
-
-    nudgePreference: {
-      type: String,
-      enum: ["MINIMAL", "BALANCED", "ACTIVE"],
-      default: "BALANCED",
-    },
+const userSchema = new mongoose.Schema({
+  email: {
+    type: String,
+    required: true,
+    unique: true
   },
-  { timestamps: true }
-);
+
+  // Onboarding / personalization
+  workMode: String, // WFH / WFO / Hybrid
+  taskComplexity: String,
+  workdayGoal: String, // Calm / Balanced / High Output
+
+  // OTP auth
+  otp: String,
+  otpExpiry: Date,
+
+  createdAt: {
+    type: Date,
+    default: Date.now
+  }
+});
 
 module.exports = mongoose.model("User", userSchema);
