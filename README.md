@@ -85,22 +85,53 @@ FlowState is built on proven cognitive and behavioral principles:
 
 ```bash
 FlowState/
+│
 ├── frontend/
 │   ├── src/
-│   │   ├── components/        # UI components (Tasks, Energy, Nudges)
-│   │   ├── pages/             # Dashboard & Analytics views
-│   │   ├── hooks/             # Work session & energy logic
+│   │   ├── components/          # UI components (Tasks, Energy, Nudges)
+│   │   ├── pages/               # Dashboard & Analytics views
+│   │   ├── hooks/               # Work session & energy logic
 │   │   └── App.jsx
 │   └── package.json
 │
 ├── backend/
-│   ├── server.js              # Express entry point
-│   ├── routes/                # Task & session APIs
-│   ├── services/
-│   │   ├── velocityEngine.js  # Work velocity calculation
-│   │   ├── energyModel.js     # Energy level logic
-│   │   └── nudgeEngine.js     # Intervention rules
-│   └── models/
+│   ├── server.js                # Express entry point
+│   │
+│   ├── intelligence/            # Intelligence Engine
+│   │   ├── signals.js           # Collects raw signals (idle, task, energy)
+│   │   ├── contextBuilder.js    # Builds situational snapshot
+│   │   ├── decisionEngine.js    # Chooses continue / switch / break
+│   │   ├── explanationEngine.js # Human-readable explanations + tone
+│   │   └── counterfactualEngine.js # Anticipatory insights
+│   │
+│   ├── middleware/
+│   │   └── authMiddleware.js    # JWT authentication middleware
+│   │
+│   ├── models/
+│   │   ├── ActivityLog.js       # Event-based activity tracking
+│   │   ├── Energy.js            # Energy snapshots / levels
+│   │   ├── Task.js              # Task management
+│   │   ├── User.js              # User + preferences + auth
+│   │   └── WorkSession.js       # Workday/session boundaries
+│   │
+│   ├── routes/
+│   │   ├── auth.js              # OTP-based login & registration
+│   │   ├── tasks.js             # Task CRUD
+│   │   ├── activity.js          # Mouse / keyboard / error events
+│   │   ├── idle.js              # Idle event logging
+│   │   ├── meeting.js           # Meeting ON / OFF events
+│   │   ├── session.js           # Session start / end
+│   │   ├── energy.js            # Energy logging
+│   │   └── analytics.js         # Aggregated insights
+│   │
+│   ├── utils/
+│   │   ├── otp.js               # OTP generation
+│   │   └── token.js             # Token helpers (if used)
+│   │
+│   ├── node_modules/
+│   ├── .env
+│   ├── package.json
+│   └── package-lock.json
 │
 ├── README.md
 └── package.json
