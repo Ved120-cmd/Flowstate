@@ -44,9 +44,9 @@ const Questionnaire = () => {
       title: "Where do you usually work?",
       desc: "Help us understand your work environment",
       options: [
-        { id: 'wfh', name: "Work From Home", icon: <Home size={18} /> },
-        { id: 'wfo', name: "Work From Office", icon: <Building size={18} /> },
-        { id: 'hybrid', name: "Hybrid", icon: <RefreshCw size={18} /> }
+        { id: 'wfh', name: "Work From Home", icon: <Home size={16} /> },
+        { id: 'wfo', name: "Work From Office", icon: <Building size={16} /> },
+        { id: 'hybrid', name: "Hybrid", icon: <RefreshCw size={16} /> }
       ],
       multi: true,
       min: 1
@@ -62,9 +62,9 @@ const Questionnaire = () => {
       title: "What tasks do you work on?",
       desc: "Select all that apply",
       options: [
-        { id: 'routine', name: "Routine tasks", icon: <CheckCircle size={18} /> },
-        { id: 'mixed', name: "Mixed workload", icon: <Target size={18} /> },
-        { id: 'complex', name: "Deep-focus work", icon: <Brain size={18} /> }
+        { id: 'routine', name: "Routine tasks", icon: <CheckCircle size={16} /> },
+        { id: 'mixed', name: "Mixed workload", icon: <Target size={16} /> },
+        { id: 'complex', name: "Deep-focus work", icon: <Brain size={16} /> }
       ],
       multi: true,
       min: 1
@@ -74,9 +74,9 @@ const Questionnaire = () => {
       title: "How do you prefer to work?",
       desc: "Choose your work style",
       options: [
-        { id: 'deep', name: "Deep focus sessions", icon: <Moon size={18} /> },
-        { id: 'switching', name: "Task switching", icon: <RefreshCw size={18} /> },
-        { id: 'balanced', name: "Balanced approach", icon: <Cloud size={18} /> }
+        { id: 'deep', name: "Deep focus sessions", icon: <Moon size={16} /> },
+        { id: 'switching', name: "Task switching", icon: <RefreshCw size={16} /> },
+        { id: 'balanced', name: "Balanced approach", icon: <Cloud size={16} /> }
       ],
       multi: false
     },
@@ -85,9 +85,9 @@ const Questionnaire = () => {
       title: "How often should we guide you?",
       desc: "Set your preference for interventions",
       options: [
-        { id: 'minimal', name: "Minimal", icon: <Shield size={18} /> },
-        { id: 'balanced', name: "Balanced", icon: <Bell size={18} /> },
-        { id: 'active', name: "Active", icon: <TrendingUp size={18} /> }
+        { id: 'minimal', name: "Minimal", icon: <Shield size={16} /> },
+        { id: 'balanced', name: "Balanced", icon: <Bell size={16} /> },
+        { id: 'active', name: "Active", icon: <TrendingUp size={16} /> }
       ],
       multi: false
     },
@@ -96,9 +96,9 @@ const Questionnaire = () => {
       title: "What's your ideal workday?",
       desc: "Define your productivity goal",
       options: [
-        { id: 'calm', name: "Calm & steady", icon: <Sun size={18} /> },
-        { id: 'output', name: "High output", icon: <Zap size={18} /> },
-        { id: 'balanced', name: "Balanced", icon: <CheckCircle size={18} /> }
+        { id: 'calm', name: "Calm & steady", icon: <Sun size={16} /> },
+        { id: 'output', name: "High output", icon: <Zap size={16} /> },
+        { id: 'balanced', name: "Balanced", icon: <CheckCircle size={16} /> }
       ],
       multi: false
     }
@@ -210,7 +210,7 @@ const Questionnaire = () => {
                 className={`q-option-card ${answers.hoursType === option.id ? 'selected' : ''}`}
                 onClick={() => handleSelect('hoursType', option.id, false)}
               >
-                <Clock size={18} />
+                <Clock size={16} />
                 <span>{option.name}</span>
               </div>
             ))}
@@ -319,9 +319,9 @@ const Questionnaire = () => {
               disabled={!isStepValid()}
             >
               {currentStep === questions.length - 1 ? (
-                <>Complete <CheckCircle size={18} /></>
+                <>Complete <CheckCircle size={16} /></>
               ) : (
-                <>Next <ArrowRight size={18} /></>
+                <>Next <ArrowRight size={16} /></>
               )}
             </button>
           </div>
@@ -329,17 +329,17 @@ const Questionnaire = () => {
           {/* Trust Footer */}
           <div className="trust-footer">
             <div className="trust-item">
-              <ShieldCheck size={14} /> Secure & Private
+              <ShieldCheck size={12} /> Secure & Private
             </div>
             <div className="trust-item">
-              <Clock size={14} /> 2 min setup
+              <Clock size={12} /> 2 min setup
             </div>
           </div>
         </form>
       </div>
       
       <div className="compliance-tag">
-        <Lock size={12} /> Your data stays private
+        <Lock size={0} /> 
       </div>
     </div>
   );

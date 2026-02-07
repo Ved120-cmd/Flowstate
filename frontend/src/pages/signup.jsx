@@ -89,7 +89,7 @@ const SignUp = () => {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="xxx@company.com"
+                  placeholder="xyz@company.com"
                   className="email-input-v2"
                   disabled={isLoading}
                 />
@@ -244,15 +244,15 @@ const SignUp = () => {
                 navigate('/questionnaire');
               }}
             >
-              Try demo mode
+              
             </button>
           </div>
         )}
       </div>
       
-      <div className="compliance-tag">
+      {/* <div className="compliance-tag">
         <Lock size={12} /> Your data stays private
-      </div>
+      </div> */}
     </div>
   );
 };

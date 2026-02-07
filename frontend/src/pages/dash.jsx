@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+// dash.jsx
+import React, { useState, useEffect } from 'react'; 
 import { 
   AreaChart, Area, 
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -20,21 +21,32 @@ import {
   BrainCircuit,
   Wind,
   Feather,
-  Calendar,
-  Plus,
   Play,
   Pause,
   Check,
-  Trash2
+  Trash2,
+  Lock,
+  Target,
+  Shield,
+  BarChart3,
+  Users,
+  Plus
 } from 'lucide-react';
 import '../App.css';
+import CardNav from './CardNav'; 
 
+// Main Dash Component
 const Dash = () => {
   const [energy, setEnergy] = useState(75);
   const [showToast, setShowToast] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [nudgeIndex, setNudgeIndex] = useState(0);
   const [showAddTask, setShowAddTask] = useState(false);
+  const [flowLock, setFlowLock] = useState(false);
+  const [flowLockTimer, setFlowLockTimer] = useState(0);
+  const [inMeeting, setInMeeting] = useState(false);
+  const [workMode, setWorkMode] = useState('');
+  
   const [newTask, setNewTask] = useState({
     title: '',
     complexity: 'Medium',
@@ -98,6 +110,19 @@ const Dash = () => {
     { time: '5pm', focus: 20 },
   ];
 
+  // Load user preferences on component mount
+  useEffect(() => {
+    const preferences = localStorage.getItem('flowstate_preferences');
+    if (preferences) {
+      const parsed = JSON.parse(preferences);
+      if (parsed.workMode && (parsed.workMode.includes('wfo') || parsed.workMode.includes('hybrid'))) {
+        setWorkMode('office');
+      } else {
+        setWorkMode('remote');
+      }
+    }
+  }, []);
+
   // Update time every minute
   useEffect(() => {
     const timer = setInterval(() => {
@@ -114,6 +139,22 @@ const Dash = () => {
     return () => clearInterval(nudgeTimer);
   }, [nudges.length]);
 
+  // Flow Lock Timer
+  useEffect(() => {
+    let interval;
+    if (flowLock && !inMeeting) {
+      interval = setInterval(() => {
+        setFlowLockTimer(prev => prev + 1);
+      }, 1000);
+    } else {
+      setFlowLockTimer(0);
+    }
+    
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [flowLock, inMeeting]);
+
   const handleAcceptSuggestion = () => {
     setShowToast(false);
     setEnergy(prev => Math.min(prev + 5, 100));
@@ -128,6 +169,19 @@ const Dash = () => {
     if (hour < 12) return { icon: Sun, text: 'Morning', color: '#88c9a1' };
     if (hour < 17) return { icon: Coffee, text: 'Afternoon', color: '#b3a396' };
     return { icon: Moon, text: 'Evening', color: '#7fa8c9' };
+  };
+
+  // Toggle meeting mode
+  const toggleMeetingMode = () => {
+    if (workMode === 'office' || workMode === 'hybrid') {
+      setInMeeting(!inMeeting);
+      if (!inMeeting) {
+        if (flowLock) {
+          setFlowLock(false);
+        }
+        setShowToast(false);
+      }
+    }
   };
 
   // Task Management Functions
@@ -149,6 +203,9 @@ const Dash = () => {
   };
 
   const handleStartTask = (taskId) => {
+    if (inMeeting) {
+      return;
+    }
     setTasks(tasks.map(task => {
       if (task.id === taskId) {
         if (task.status === 'Todo') {
@@ -160,6 +217,9 @@ const Dash = () => {
   };
 
   const handlePauseTask = (taskId) => {
+    if (inMeeting) {
+      return;
+    }
     setTasks(tasks.map(task => {
       if (task.id === taskId && task.status === 'In Progress') {
         return { ...task, isPaused: !task.isPaused };
@@ -169,6 +229,9 @@ const Dash = () => {
   };
 
   const handleCompleteTask = (taskId) => {
+    if (inMeeting) {
+      return;
+    }
     setTasks(tasks.map(task => {
       if (task.id === taskId) {
         return { ...task, status: 'Completed' };
@@ -179,7 +242,26 @@ const Dash = () => {
   };
 
   const handleDeleteTask = (taskId) => {
+    if (inMeeting) {
+      return;
+    }
     setTasks(tasks.filter(task => task.id !== taskId));
+  };
+
+  const toggleFlowLock = () => {
+    if (inMeeting) {
+      return;
+    }
+    setFlowLock(!flowLock);
+    if (!flowLock) {
+      setShowToast(false);
+    }
+  };
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   const timeOfDay = getTimeOfDay();
@@ -187,11 +269,30 @@ const Dash = () => {
 
   const activeTasks = tasks.filter(t => t.status !== 'Completed');
   const completedTasks = tasks.filter(t => t.status === 'Completed');
+  const currentTask = tasks.find(t => t.status === 'In Progress');
+
+  const showMeetingButton = workMode === 'office' || workMode === 'hybrid';
 
   return (
-    <div className="app-container">
+    <div className={`app-container ${flowLock ? 'flow-lock-active' : ''} ${inMeeting ? 'in-meeting-mode' : ''}`}>
+      {/* MEETING MODE INDICATOR */}
+      {inMeeting && !flowLock && (
+        <div className="meeting-indicator">
+          <div className="meeting-icon-wrapper">
+            <Users className="meeting-icon" />
+          </div>
+          <div className="meeting-content">
+            <div className="meeting-message">In Meeting Mode</div>
+            <div className="meeting-subtitle">Tracking paused</div>
+          </div>
+          <button className="meeting-exit-btn" onClick={toggleMeetingMode}>
+            End Meeting
+          </button>
+        </div>
+      )}
+
       {/* TOAST NOTIFICATION */}
-      {showToast && (
+      {showToast && !flowLock && !inMeeting && (
         <div className="toast-notification">
           <div className="toast-content">
             <div className="toast-icon-wrapper">
@@ -221,14 +322,52 @@ const Dash = () => {
         </div>
       )}
 
-      {/* HEADER */}
-      <header className="dashboard-header">
-        <div className="header-greeting">
-          <h1 className="header-title">Welcome back, Alex</h1>
-          <div className="header-nudge">
-            <Heart className="nudge-icon" style={{ width: '16px', height: '16px', color: '#88c9a1' }} />
-            {nudges[nudgeIndex]}
+      {/* FLOW LOCK OVERLAY */}
+      {flowLock && !inMeeting && (
+        <div className="flow-lock-overlay">
+          <div className="flow-lock-center">
+            <div className="flow-lock-icon-large">
+              <Lock size={48} />
+            </div>
+            <div className="flow-lock-title-large">Flow State Active</div>
+            <div className="flow-lock-subtitle-large">Working in quiet focus</div>
+            <div className="flow-lock-timer-large">
+              {formatTime(flowLockTimer)}
+            </div>
+            <div className="flow-lock-task">
+              {currentTask ? currentTask.title : "No active task selected"}
+            </div>
+            <div className="flow-lock-affirmation">
+              "Calm focus yields the best results"
+            </div>
+            <button 
+              className="flow-lock-exit-btn"
+              onClick={toggleFlowLock}
+            >
+              Exit Flow State
+            </button>
           </div>
+        </div>
+      )}
+
+      {/* HEADER */}
+      {!flowLock && !inMeeting && (
+        <header className="dashboard-header">
+          <div className="header-greeting">
+            <div className="greeting-content">
+              <h1 className="header-title">Welcome back, Alex</h1>
+              <div className="header-nudge">
+                <Heart className="nudge-icon" style={{ width: '16px', height: '16px', color: '#88c9a1' }} />
+                {nudges[nudgeIndex]}
+              </div>
+            </div>
+            
+            {/* CARD NAV MENU - Now as a separate component */}
+            <div className="card-nav-position-wrapper">
+              <CardNav />
+            </div>
+          </div>
+          
           <div className="header-meta">
             <TimeIcon style={{ width: '16px', height: '16px', color: timeOfDay.color }} />
             <span>Good {timeOfDay.text}</span>
@@ -238,298 +377,336 @@ const Dash = () => {
             <span className="divider">•</span>
             <Leaf style={{ width: '16px', height: '16px', color: '#88c9a1' }} />
             <span>Mindful Mode</span>
+            {workMode && (
+              <>
+                <span className="divider">•</span>
+                <span className="work-mode-badge">
+                  {workMode === 'office' ? '🏢 Office' : workMode === 'hybrid' ? '🔄 Hybrid' : '🏠 Remote'}
+                </span>
+              </>
+            )}
           </div>
-        </div>
-      </header>
+        </header>
+      )}
 
       {/* MAIN DASHBOARD LAYOUT */}
-      <div className="dashboard-layout">
-        
-        {/* ENERGY CARD - LEFT */}
-        <div className="bento-card energy-card">
-          <div className="card-header">
-            <div className="header-icon-wrapper">
-              <Zap className="header-icon energy-icon" />
-            </div>
-            <div className="header-text">
-              <h3>Energy Flow</h3>
-              <span className="header-badge">Balanced</span>
-            </div>
-          </div>
+      {!flowLock && !inMeeting && (
+        <div className="dashboard-layout">
           
-          <div className="energy-main">
-            <div className="energy-circle-compact">
-              <svg className="energy-svg" viewBox="0 0 140 140">
-                <defs>
-                  <linearGradient id="energyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#88c9a1" />
-                    <stop offset="100%" stopColor="#a8d4b5" />
-                  </linearGradient>
-                </defs>
-                <circle 
-                  className="circle-bg"
-                  cx="70" cy="70" r="60"
-                />
-                <circle 
-                  className="circle-fill"
-                  cx="70" cy="70" r="60"
-                  strokeDasharray={`${energy * 3.77}, 376.99`}
-                />
-              </svg>
-              <div className="energy-center">
-                <div className="energy-percent">{energy}%</div>
-                <div className="energy-label">Calm Energy</div>
+          {/* ENERGY CARD */}
+          <div className="bento-card energy-card">
+            <div className="card-header">
+              <div className="header-icon-wrapper">
+                <Zap className="header-icon energy-icon" />
+              </div>
+              <div className="header-text">
+                <h3>Energy Flow</h3>
+                <span className="header-badge">Balanced</span>
               </div>
             </div>
-
-            <div className="energy-stats">
-              <div className="energy-stat-item">
-                <div className="stat-dot green"></div>
-                <div className="stat-info">
-                  <span className="stat-title">Peak Focus</span>
-                  <span className="stat-value">10 AM - 12 PM</span>
+            
+            <div className="energy-main">
+              <div className="energy-circle-compact">
+                <svg className="energy-svg" viewBox="0 0 140 140">
+                  <defs>
+                    <linearGradient id="energyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#88c9a1" />
+                      <stop offset="100%" stopColor="#a8d4b5" />
+                    </linearGradient>
+                  </defs>
+                  <circle 
+                    className="circle-bg"
+                    cx="70" cy="70" r="60"
+                  />
+                  <circle 
+                    className="circle-fill"
+                    cx="70" cy="70" r="60"
+                    strokeDasharray={`${energy * 3.77}, 376.99`}
+                  />
+                </svg>
+                <div className="energy-center">
+                  <div className="energy-percent">{energy}%</div>
+                  <div className="energy-label">Calm Energy</div>
                 </div>
               </div>
-              <div className="energy-stat-item">
-                <div className="stat-dot yellow"></div>
-                <div className="stat-info">
-                  <span className="stat-title">Current State</span>
-                  <span className="stat-value">Steady Flow</span>
-                </div>
-              </div>
-              <div className="energy-stat-item">
-                <div className="stat-dot blue"></div>
-                <div className="stat-info">
-                  <span className="stat-title">Trend</span>
-                  <span className="stat-value">Stable ↑</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
 
-        {/* SUGGESTIONS CARD - RIGHT */}
-        <div className="bento-card suggestions-card">
-          <div className="card-header">
-            <div className="header-icon-wrapper">
-              <Brain className="header-icon ai-icon" />
-            </div>
-            <div className="header-text">
-              <h3>Mindful Suggestions</h3>
-              <span className="header-badge">For You</span>
-            </div>
-          </div>
-          <div className="suggestions-list">
-            <div className="suggestion-item green">
-              <div className="suggestion-icon-wrapper">
-                <Feather className="suggestion-icon" />
-              </div>
-              <div className="suggestion-content">
-                <div className="suggestion-title">Light Task Match</div>
-                <div className="suggestion-desc">Documentation aligns with your calm energy</div>
-              </div>
-              <div className="suggestion-action">→</div>
-            </div>
-            <div className="suggestion-item yellow">
-              <div className="suggestion-icon-wrapper">
-                <Wind className="suggestion-icon" />
-              </div>
-              <div className="suggestion-content">
-                <div className="suggestion-title">Breathing Space</div>
-                <div className="suggestion-desc">Take 5 mindful breaths in 30 minutes</div>
-              </div>
-              <div className="suggestion-action">→</div>
-            </div>
-            <div className="suggestion-item blue">
-              <div className="suggestion-icon-wrapper">
-                <Calendar className="suggestion-icon" />
-              </div>
-              <div className="suggestion-content">
-                <div className="suggestion-title">Future Planning</div>
-                <div className="suggestion-desc">Save complex tasks for fresh morning mind</div>
-              </div>
-              <div className="suggestion-action">→</div>
-            </div>
-          </div>
-        </div>
-
-        {/* ANALYTICS CARD - LEFT */}
-        <div className="bento-card analytics-card">
-          <div className="card-header">
-            <div className="header-icon-wrapper">
-              <BrainCircuit className="header-icon focus-icon" />
-            </div>
-            <div className="header-text">
-              <h3>Focus Rhythm</h3>
-              <span className="header-badge">Today</span>
-            </div>
-          </div>
-          <div className="chart-wrapper">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={focusData}>
-                <defs>
-                  <linearGradient id="colorFocus" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#7fa8c9" stopOpacity={0.2}/>
-                    <stop offset="95%" stopColor="#7fa8c9" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(140, 152, 164, 0.1)" vertical={false} />
-                <XAxis 
-                  dataKey="time" 
-                  stroke="#a8b6bf" 
-                  fontSize={11}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <YAxis 
-                  stroke="#a8b6bf" 
-                  fontSize={11}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <Tooltip 
-                  contentStyle={{ 
-                    borderRadius: '10px', 
-                    border: '1px solid #e8e4dd',
-                    backgroundColor: '#ffffff',
-                    boxShadow: '0 8px 20px rgba(140, 152, 164, 0.1)',
-                    fontSize: '12px'
-                  }}
-                  labelStyle={{ color: '#3c3c3c', fontWeight: 500 }}
-                />
-                <Area 
-                  type="monotone" 
-                  dataKey="focus" 
-                  stroke="#7fa8c9" 
-                  fill="url(#colorFocus)" 
-                  strokeWidth={2} 
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="burnout-warning">
-            <AlertCircle className="warning-icon" />
-            <span>Gentle dip expected around 2pm - consider a mindful break</span>
-          </div>
-        </div>
-
-        {/* TASKS CARD - RIGHT */}
-        <div className="bento-card tasks-card">
-          <div className="card-header">
-            <div className="header-icon-wrapper">
-              <Layout className="header-icon task-icon" />
-            </div>
-            <div className="header-text">
-              <h3>Task Flow</h3>
-              <span className="header-badge">{activeTasks.length} active</span>
-            </div>
-            <button className="add-task-btn" onClick={() => setShowAddTask(!showAddTask)}>
-              <Plus className="plus-icon" />
-              Add Task
-            </button>
-          </div>
-
-          {/* ADD TASK FORM */}
-          {showAddTask && (
-            <div className="add-task-form">
-              <input
-                type="text"
-                placeholder="Task name..."
-                value={newTask.title}
-                onChange={(e) => setNewTask({...newTask, title: e.target.value})}
-                className="task-input"
-              />
-              <div className="form-row">
-                <select
-                  value={newTask.complexity}
-                  onChange={(e) => setNewTask({...newTask, complexity: e.target.value})}
-                  className="task-select"
-                >
-                  <option value="Low">Low</option>
-                  <option value="Medium">Medium</option>
-                  <option value="High">High</option>
-                </select>
-                <input
-                  type="text"
-                  placeholder="Duration (e.g., 2h)"
-                  value={newTask.duration}
-                  onChange={(e) => setNewTask({...newTask, duration: e.target.value})}
-                  className="task-input-small"
-                />
-              </div>
-              <div className="form-actions">
-                <button className="form-btn save" onClick={handleAddTask}>
-                  <Check size={14} />
-                  Save Task
-                </button>
-                <button className="form-btn cancel" onClick={() => setShowAddTask(false)}>
-                  <X size={14} />
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* ACTIVE TASKS */}
-          <div className="tasks-list">
-            {activeTasks.map(task => (
-              <div key={task.id} className={`task-item ${task.status === 'In Progress' ? 'active' : ''}`}>
-                <div className="task-left">
-                  <div className="task-checkbox" onClick={() => handleCompleteTask(task.id)}>
-                    {task.status === 'Completed' && <Check className="check-icon" size={14} />}
-                  </div>
-                  <div className="task-info">
-                    <div className="task-title">{task.title}</div>
-                    <div className="task-meta">
-                      <span className={`complexity-badge ${task.complexity.toLowerCase()}`}>
-                        {task.complexity}
-                      </span>
-                      <span className="task-duration">
-                        <Clock className="duration-icon" />
-                        {task.duration}
-                      </span>
-                      {task.status === 'In Progress' && task.isPaused && (
-                        <span className="status-badge paused">Paused</span>
-                      )}
-                    </div>
+              <div className="energy-stats">
+                <div className="energy-stat-item">
+                  <div className="stat-dot green"></div>
+                  <div className="stat-info">
+                    <span className="stat-title">Peak Focus</span>
+                    <span className="stat-value">10 AM - 12 PM</span>
                   </div>
                 </div>
-                <div className="task-actions">
-                  {task.status === 'Todo' && (
-                    <button className="task-action-btn start" onClick={() => handleStartTask(task.id)}>
-                      <Play size={14} />
-                    </button>
-                  )}
-                  {task.status === 'In Progress' && (
-                    <>
-                      <button className="task-action-btn pause" onClick={() => handlePauseTask(task.id)}>
-                        {task.isPaused ? <Play size={14} /> : <Pause size={14} />}
-                      </button>
-                      <button className="task-action-btn complete" onClick={() => handleCompleteTask(task.id)}>
-                        <Check size={14} />
-                      </button>
-                    </>
-                  )}
-                  <button className="task-action-btn delete" onClick={() => handleDeleteTask(task.id)}>
-                    <Trash2 size={14} />
+                <div className="energy-stat-item">
+                  <div className="stat-dot yellow"></div>
+                  <div className="stat-info">
+                    <span className="stat-title">Current</span>
+                    <span className="stat-value">Steady Flow</span>
+                  </div>
+                </div>
+                <div className="energy-stat-item">
+                  <div className="stat-dot blue"></div>
+                  <div className="stat-info">
+                    <span className="stat-title">Trend</span>
+                    <span className="stat-value">Stable ↑</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* SUGGESTIONS CARD */}
+          <div className="bento-card suggestions-card">
+            <div className="card-header">
+              <div className="header-icon-wrapper">
+                <Brain className="header-icon ai-icon" />
+              </div>
+              <div className="header-text">
+                <h3>Mindful Suggestions</h3>
+                <span className="header-badge">For You</span>
+              </div>
+            </div>
+            <div className="suggestions-list">
+              <div className="suggestion-item green">
+                <div className="suggestion-icon-wrapper">
+                  <Feather className="suggestion-icon" />
+                </div>
+                <div className="suggestion-content">
+                  <div className="suggestion-title">Light Task Match</div>
+                  <div className="suggestion-desc">Documentation aligns with calm energy</div>
+                </div>
+                <div className="suggestion-action">→</div>
+              </div>
+              <div className="suggestion-item yellow">
+                <div className="suggestion-icon-wrapper">
+                  <Wind className="suggestion-icon" />
+                </div>
+                <div className="suggestion-content">
+                  <div className="suggestion-title">Breathing Space</div>
+                  <div className="suggestion-desc">Take 5 mindful breaths in 30 min</div>
+                </div>
+                <div className="suggestion-action">→</div>
+              </div>
+            </div>
+          </div>
+
+          {/* CURRENT TASK CARD */}
+          <div className="bento-card current-task-card">
+            <div className="card-header">
+              <div className="header-icon-wrapper">
+                <Target className="header-icon" />
+              </div>
+              <div className="header-text">
+                <h3>Current Task</h3>
+                <span className="header-badge">{currentTask ? 'Active' : 'Idle'}</span>
+              </div>
+            </div>
+
+            {!currentTask ? (
+              <div className="no-task-state">
+                <Layout className="no-task-icon" />
+                <div className="no-task-text">No task in progress</div>
+              </div>
+            ) : (
+              <div className="task-active-state">
+                <div className="task-main-info">
+                  <div className="task-name">{currentTask.title}</div>
+                  <div className="task-meta-row">
+                    <span className={`complexity-badge ${currentTask.complexity.toLowerCase()}`}>
+                      {currentTask.complexity}
+                    </span>
+                    <span className="task-duration">
+                      <Clock className="duration-icon" />
+                      {currentTask.duration}
+                    </span>
+                  </div>
+                </div>
+                
+                <div className="status-indicator">
+                  <div className="status-dot"></div>
+                  {currentTask.isPaused ? 'Paused' : 'In Progress'}
+                </div>
+
+                <div className="task-actions-row">
+                  <button 
+                    className="task-btn pause" 
+                    onClick={() => handlePauseTask(currentTask.id)}
+                  >
+                    {currentTask.isPaused ? <Play size={14} /> : <Pause size={14} />}
+                    {currentTask.isPaused ? 'Resume' : 'Pause'}
+                  </button>
+                  <button 
+                    className="task-btn complete"
+                    onClick={() => handleCompleteTask(currentTask.id)}
+                  >
+                    <Check size={14} />
+                    Complete
                   </button>
                 </div>
               </div>
-            ))}
+            )}
           </div>
 
-          {/* COMPLETED TASKS */}
-          {completedTasks.length > 0 && (
-            <div className="completed-section">
-              <div className="completed-header">
-                <span className="completed-title">Completed ({completedTasks.length})</span>
+          {/* ANALYTICS CARD - FOCUS RHYTHM */}
+          <div className="bento-card analytics-card">
+            <div className="card-header">
+              <div className="header-icon-wrapper">
+                <BrainCircuit className="header-icon focus-icon" />
               </div>
+              <div className="header-text">
+                <h3>Focus Rhythm</h3>
+                <span className="header-badge">Today</span>
+              </div>
+            </div>
+            <div className="chart-wrapper">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={focusData}>
+                  <defs>
+                    <linearGradient id="colorFocus" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#7fa8c9" stopOpacity={0.2}/>
+                      <stop offset="95%" stopColor="#7fa8c9" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(140, 152, 164, 0.1)" vertical={false} />
+                  <XAxis 
+                    dataKey="time" 
+                    stroke="#a8b6bf" 
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis 
+                    stroke="#a8b6bf" 
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      borderRadius: '10px', 
+                      border: '1px solid #e8e4dd',
+                      backgroundColor: '#ffffff',
+                      boxShadow: '0 8px 20px rgba(140, 152, 164, 0.1)',
+                      fontSize: '12px'
+                    }}
+                    labelStyle={{ color: '#3c3c3c', fontWeight: 500 }}
+                  />
+                  <Area 
+                    type="monotone" 
+                    dataKey="focus" 
+                    stroke="#7fa8c9" 
+                    fill="url(#colorFocus)" 
+                    strokeWidth={2} 
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="burnout-warning">
+              <AlertCircle className="warning-icon" />
+              <span>Gentle dip expected around 2pm - consider a mindful break</span>
+            </div>
+          </div>
+
+          {/* TASKS CARD */}
+          <div className="bento-card tasks-card">
+            <div className="card-header">
+              <div className="header-icon-wrapper">
+                <Layout className="header-icon task-icon" />
+              </div>
+              <div className="header-text">
+                <h3>Task Flow</h3>
+                <span className="header-badge">{activeTasks.length} active</span>
+              </div>
+              <div className="header-actions">
+                {showMeetingButton && (
+                  <button 
+                    className={`meeting-mode-btn ${inMeeting ? 'active' : ''}`}
+                    onClick={toggleMeetingMode}
+                  >
+                    <Users size={14} />
+                    <span>{inMeeting ? 'In Meeting' : 'Start Meeting'}</span>
+                  </button>
+                )}
+                <button 
+                  className={`flow-lock-btn ${flowLock ? 'active' : ''}`}
+                  onClick={toggleFlowLock}
+                  disabled={inMeeting}
+                >
+                  <Lock size={14} />
+                  <span>Flow Lock</span>
+                </button>
+                <button 
+                  className="add-task-btn" 
+                  onClick={() => setShowAddTask(!showAddTask)}
+                  disabled={inMeeting}
+                >
+                  <Plus className="plus-icon" />
+                  Add Task
+                </button>
+              </div>
+            </div>
+
+            {/* ADD TASK FORM */}
+            {showAddTask && !inMeeting && (
+              <div className="add-task-form">
+                <input
+                  type="text"
+                  placeholder="Task name..."
+                  value={newTask.title}
+                  onChange={(e) => setNewTask({...newTask, title: e.target.value})}
+                  className="task-input"
+                />
+                <div className="form-row">
+                  <select
+                    value={newTask.complexity}
+                    onChange={(e) => setNewTask({...newTask, complexity: e.target.value})}
+                    className="task-select"
+                  >
+                    <option value="Low">Low</option>
+                    <option value="Medium">Medium</option>
+                    <option value="High">High</option>
+                  </select>
+                  <input
+                    type="text"
+                    placeholder="Duration (e.g., 2h)"
+                    value={newTask.duration}
+                    onChange={(e) => setNewTask({...newTask, duration: e.target.value})}
+                    className="task-input-small"
+                  />
+                </div>
+                <div className="form-actions">
+                  <button className="form-btn save" onClick={handleAddTask}>
+                    <Check size={14} />
+                    Save Task
+                  </button>
+                  <button className="form-btn cancel" onClick={() => setShowAddTask(false)}>
+                    <X size={14} />
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* MEETING MESSAGE */}
+            {inMeeting && (
+              <div className="meeting-message-card">
+                <Users size={24} />
+                <div className="meeting-message-content">
+                  <h4>Meeting Mode Active</h4>
+                  <p>Task tracking and energy monitoring are paused. Focus on your meeting.</p>
+                </div>
+              </div>
+            )}
+
+            {/* ACTIVE TASKS */}
+            {!inMeeting && (
               <div className="tasks-list">
-                {completedTasks.map(task => (
-                  <div key={task.id} className="task-item completed">
+                {activeTasks.map(task => (
+                  <div key={task.id} className={`task-item ${task.status === 'In Progress' ? 'active' : ''}`}>
                     <div className="task-left">
-                      <div className="task-checkbox checked">
-                        <Check className="check-icon" size={14} />
+                      <div className="task-checkbox" onClick={() => handleCompleteTask(task.id)}>
+                        {task.status === 'Completed' && <Check className="check-icon" size={14} />}
                       </div>
                       <div className="task-info">
                         <div className="task-title">{task.title}</div>
@@ -541,20 +718,115 @@ const Dash = () => {
                             <Clock className="duration-icon" />
                             {task.duration}
                           </span>
+                          {task.status === 'In Progress' && task.isPaused && (
+                            <span className="status-badge paused">Paused</span>
+                          )}
                         </div>
                       </div>
                     </div>
-                    <button className="task-action-btn delete" onClick={() => handleDeleteTask(task.id)}>
-                      <Trash2 size={14} />
-                    </button>
+                    <div className="task-actions">
+                      {task.status === 'Todo' && (
+                        <button className="task-action-btn start" onClick={() => handleStartTask(task.id)}>
+                          <Play size={14} />
+                        </button>
+                      )}
+                      {task.status === 'In Progress' && (
+                        <>
+                          <button className="task-action-btn pause" onClick={() => handlePauseTask(task.id)}>
+                            {task.isPaused ? <Play size={14} /> : <Pause size={14} />}
+                          </button>
+                          <button className="task-action-btn complete" onClick={() => handleCompleteTask(task.id)}>
+                            <Check size={14} />
+                          </button>
+                        </>
+                      )}
+                      <button className="task-action-btn delete" onClick={() => handleDeleteTask(task.id)}>
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
-            </div>
-          )}
-        </div>
+            )}
 
-      </div>
+            {/* COMPLETED TASKS */}
+            {!inMeeting && completedTasks.length > 0 && (
+              <div className="completed-section">
+                <div className="completed-header">
+                  <span className="completed-title">Completed ({completedTasks.length})</span>
+                </div>
+                <div className="tasks-list">
+                  {completedTasks.map(task => (
+                    <div key={task.id} className="task-item completed">
+                      <div className="task-left">
+                        <div className="task-checkbox checked">
+                          <Check className="check-icon" size={14} />
+                        </div>
+                        <div className="task-info">
+                          <div className="task-title">{task.title}</div>
+                          <div className="task-meta">
+                            <span className={`complexity-badge ${task.complexity.toLowerCase()}`}>
+                              {task.complexity}
+                            </span>
+                            <span className="task-duration">
+                              <Clock className="duration-icon" />
+                              {task.duration}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <button className="task-action-btn delete" onClick={() => handleDeleteTask(task.id)}>
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* MEETING MODE VIEW */}
+      {inMeeting && !flowLock && (
+        <div className="meeting-overlay">
+          <div className="meeting-center">
+            <div className="meeting-icon-large">
+              <Users size={48} />
+            </div>
+            <div className="meeting-title-large">Meeting Mode Active</div>
+            <div className="meeting-subtitle-large">Tracking paused • Focus on your conversation</div>
+            <div className="meeting-timer-large">
+              <Clock size={20} />
+              Meeting in progress
+            </div>
+            <div className="meeting-note">
+              Your energy levels and task progress are preserved.
+              <br />
+              No idle time will be counted during this meeting.
+            </div>
+            <div className="meeting-affirmation">
+              "Collaboration fuels innovation"
+            </div>
+            <button 
+              className="meeting-exit-btn-large"
+              onClick={toggleMeetingMode}
+            >
+              End Meeting & Resume Tracking
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* PRIVACY FOOTER */}
+      {!flowLock && !inMeeting && (
+        <div className="privacy-footer">
+          <div className="privacy-content">
+            <Shield size={12} />
+            <span>Privacy-first • No keystroke tracking • Data stays with you</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

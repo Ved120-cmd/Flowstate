@@ -1,10 +1,8 @@
-/* ==================== QUESTIONNAIRE - MATCHING SIGNUP THEME ==================== */
+/* ==================== QUESTIONNAIRE - COMPACT VERSION ==================== */
 
-/* Reusing signup-container and signup-card classes for consistency */
-
-/* Progress Section */
+/* Progress Section - Reduced spacing */
 .progress-section {
-  margin-bottom: 32px;
+  margin-bottom: 20px;
   text-align: center;
 }
 
@@ -12,13 +10,13 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 6px;
+  margin-bottom: 6px;
 }
 
 .progress-dot {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--border-color);
   transition: all 0.3s ease;
@@ -26,45 +24,45 @@
 
 .progress-dot.active {
   background: var(--accent-sage);
-  transform: scale(1.3);
+  transform: scale(1.4);
 }
 
 .progress-dot.completed {
   background: var(--accent-sage);
-  opacity: 0.6;
+  opacity: 0.5;
 }
 
 .progress-label {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-secondary);
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
-/* Question Content */
+/* Question Content - Reduced spacing */
 .q-content {
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 
-/* Options Grid - Compact cards matching signup style */
+/* Options Grid - Compact cards */
 .q-options-grid {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .q-option-card {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 16px 18px;
+  gap: 10px;
+  padding: 12px 14px;
   border: 1.5px solid var(--border-color);
   border-radius: 8px;
   background: white;
   cursor: pointer;
   transition: all 0.2s;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--text-primary);
 }
@@ -88,26 +86,32 @@
   color: var(--accent-sage);
 }
 
-/* Time Selection */
+/* Time Selection - Compact */
 .q-time-row {
   display: flex;
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
 .q-time-group {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
+}
+
+.input-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
 }
 
 .q-time-select {
   width: 100%;
-  padding: 14px;
+  padding: 12px;
   border: 1.5px solid var(--border-color);
   border-radius: 8px;
-  font-size: 15px;
+  font-size: 14px;
   font-family: var(--font-main);
   color: var(--text-primary);
   background: white;
@@ -121,14 +125,59 @@
   box-shadow: 0 0 0 3px rgba(136, 201, 161, 0.1);
 }
 
-/* Navigation */
+/* Navigation - Compact */
 .q-navigation {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-top: 24px;
-  padding-top: 24px;
+  gap: 100px;
+  margin-top: 16px;
+  padding-top: 16px;
   border-top: 1px solid var(--border-color);
+}
+
+.text-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.2s;
+  font-family: var(--font-main);
+}
+
+.text-btn:hover {
+  color: var(--text-primary);
+}
+
+.submit-btn-premium {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  background: var(--accent-sage);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: var(--font-main);
+}
+
+.submit-btn-premium:hover:not(:disabled) {
+  background: #76b890;
+  transform: translateY(-1px);
+}
+
+.submit-btn-premium:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* Loading State */
@@ -140,10 +189,16 @@
 .loading-state .spinning {
   color: var(--accent-sage);
   margin-bottom: 16px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .loading-state p {
-  font-size: 15px;
+  font-size: 14px;
   color: var(--text-secondary);
   font-weight: 500;
 }
@@ -152,7 +207,7 @@
 @media (max-width: 480px) {
   .q-time-row {
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
   }
 
   .q-navigation {
@@ -166,10 +221,10 @@
   }
 
   .q-navigation .submit-btn-premium {
-    width: 100%;
+    width: 40%;
   }
 
   .q-option-card {
-    padding: 14px 16px;
+    padding: 12px 14px;
   }
 }

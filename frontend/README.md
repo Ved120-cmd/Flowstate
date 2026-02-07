@@ -1,16 +1,118 @@
-# React + Vite
+<!-- 🧠🌿 FLOWSTATE README 🌿🧠 -->
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+<div align="center">
 
-Currently, two official plugins are available:
+<h1 align="center">
+  🌿 FlowState
+</h1>
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+<h3>Smart Task & Energy Management Platform for Knowledge Workers</h3>
 
-## React Compiler
+<p align="center">
+  <img src="https://img.shields.io/badge/Frontend-React-blue?style=for-the-badge&logo=react" />
+  <img src="https://img.shields.io/badge/Backend-Node.js-green?style=for-the-badge&logo=node.js" />
+  <img src="https://img.shields.io/badge/Database-MongoDB-darkgreen?style=for-the-badge&logo=mongodb" />
+  <img src="https://img.shields.io/badge/UI-Minimal%20%26%20Calm-purple?style=for-the-badge" />
+</p>
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+<p align="center">
+  <img src="https://skillicons.dev/icons?i=react,js,html,css,nodejs,express,mongodb,git" />
+</p>
 
-## Expanding the ESLint configuration
+> 🚀 **FlowState** is a human-centered productivity platform that adapts tasks and suggestions based on a user’s **mental energy, focus level, and work patterns** — helping people stay productive **without burnout**.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+</div>
+
+---
+
+## 🌿 Overview
+
+Modern productivity tools focus on *output* — checklists, deadlines, and notifications — while ignoring **human cognitive limits**.  
+This often leads to fatigue, burnout, and declining performance.
+
+**FlowState** takes a different approach.
+
+Instead of forcing productivity, it:
+- 🧠 Respects mental energy
+- 🔁 Adapts task flow dynamically
+- 🌿 Encourages sustainable focus
+
+The system analyzes **work velocity, idle time, and error patterns** to provide **gentle, context-aware guidance** that helps users work *with* their mind, not against it.
+
+---
+
+## 🧠 Core Features
+
+| Feature | Description |
+|------|-------------|
+| 📋 Task Management | Create, update, and prioritize tasks |
+| 🧩 Task Complexity Labels | Low / Medium / High cognitive load |
+| ⚡ Work Velocity Tracking | Measures productivity using speed & errors |
+| 🔋 Energy Level Indicator | Visual representation of mental energy |
+| 🌿 Smart Nudges | Gentle suggestions instead of interruptions |
+| 🔁 Adaptive Task Switching | Recommends lighter tasks when fatigue rises |
+| ⏸ Break Suggestions | Suggests recovery breaks intelligently |
+| 📊 Focus Analytics | Weekly insights into focus & burnout risk |
+
+---
+
+## 🧠 Psychology-Driven Design
+
+FlowState is inspired by proven cognitive and behavioral science:
+
+- **Cognitive Load Theory** → Minimal UI, reduced mental friction  
+- **Nudge Theory** → Suggestions without force  
+- **Self-Determination Theory** → User autonomy & control  
+- **Attention Restoration Theory** → Calm visuals & whitespace  
+
+> The goal is not to control users — but to **support better decisions at the right time**.
+
+---
+
+## ⚙️ Tech Stack
+
+### Frontend
+- React
+- Vite
+- HTML, CSS, JavaScript
+- Minimal, calm UI design
+
+### Backend
+- Node.js
+- Express.js
+- MongoDB
+- JWT-based authentication
+
+### Intelligence Layer
+- Rule-based behavior analysis
+- Work velocity & energy estimation
+- Context-aware decision logic
+
+---
+
+## 🗂️ Project Structure
+
+```bash
+FlowState/
+│
+├── frontend/
+│   ├── src/
+│   │   ├── components/          # Reusable UI components
+│   │   ├── pages/               # Dashboard & analytics pages
+│   │   ├── styles/              # Global & page-level styles
+│   │   ├── hooks/               # Custom React hooks
+│   │   └── App.jsx
+│   ├── package.json
+│   └── package-lock.json
+│
+├── backend/
+│   ├── server.js                # Express entry point
+│   ├── routes/                  # API routes
+│   ├── models/                  # MongoDB schemas
+│   ├── middleware/              # Auth & request middleware
+│   ├── utils/                   # Helper utilities
+│   ├── .env
+│   └── package.json
+│
+├── README.md
+└── .gitignore
