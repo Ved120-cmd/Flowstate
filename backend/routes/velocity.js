@@ -4,7 +4,7 @@
  */
 
 const express = require('express');
-const VelocityController = require('./velocityController');
+const VelocityController = require('../controller/velocityController');
 
 const router = express.Router();
 const velocityController = new VelocityController();

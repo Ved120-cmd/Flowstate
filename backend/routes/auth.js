@@ -1,71 +1,73 @@
 const express = require("express");
+const router = express.Router();
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const { generateOTP } = require("../utils/otp");
 
-const router = express.Router();
+/**
+ * STEP 1: Request OTP (Register if new)
+ */
+router.post("/request-otp", async (req, res) => {
+  const { email } = req.body;
 
-router.post("/register", async (req, res) => {
-  try {
-    const {
-      email,
-      name,
-      workMode,
-      workStart,
-      workEnd,
-      taskComplexityBaseline,
-      workStyle,
-      workdayFeeling,
-      nudgePreference,
-    } = req.body;
-
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ message: "User already exists" });
-    }
-
-    const user = await User.create({
-      email,
-      name,
-      workMode,
-      workStart,
-      workEnd,
-      taskComplexityBaseline,
-      workStyle,
-      workdayFeeling,
-      nudgePreference,
-    });
-
-    const token = jwt.sign(
-      { userId: user._id, email: user.email },
-      process.env.JWT_SECRET,
-      { expiresIn: "30d" }
-    );
-
-    res.status(201).json({ token, user });
-  } catch (err) {
-    res.status(500).json({ message: "Registration failed" });
+  if (!email || !email.endsWith("@company.com")) {
+    return res.status(403).json({ message: "Company email required" });
   }
+
+  let user = await User.findOne({ email });
+
+  // Auto-register
+  if (!user) {
+    user = await User.create({ email });
+  }
+
+  const otp = generateOTP();
+  user.otp = otp;
+  user.otpExpiry = Date.now() + 5 * 60 * 1000; // 5 minutes
+  await user.save();
+
+  // 🔴 Hackathon: mock OTP delivery
+  console.log(`OTP for ${email}: ${otp}`);
+
+  res.json({ message: "OTP sent" });
 });
 
-router.post("/login", async (req, res) => {
-  try {
-    const { email } = req.body;
+/**
+ * STEP 2: Verify OTP
+ */
+router.post("/verify-otp", async (req, res) => {
+  const { email, otp } = req.body;
 
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
+  const user = await User.findOne({
+    email,
+    otp,
+    otpExpiry: { $gt: Date.now() }
+  });
 
-    const token = jwt.sign(
-      { userId: user._id, email: user.email },
-      process.env.JWT_SECRET,
-      { expiresIn: "30d" }
-    );
-
-    res.json({ token, user });
-  } catch (err) {
-    res.status(500).json({ message: "Login failed" });
+  if (!user) {
+    return res.status(401).json({ message: "Invalid or expired OTP" });
   }
+
+  // Clear OTP
+  user.otp = null;
+  user.otpExpiry = null;
+  await user.save();
+
+  // Issue JWT
+  const token = jwt.sign(
+    { userId: user._id },
+    process.env.JWT_SECRET,
+    { expiresIn: "7d" }
+  );
+
+  res.json({
+    token,
+    user: {
+      email: user.email,
+      workMode: user.workMode,
+      workdayGoal: user.workdayGoal
+    }
+  });
 });
 
 module.exports = router;

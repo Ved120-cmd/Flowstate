@@ -1,34 +1,26 @@
 const express = require("express");
-const WorkSession = require("../models/WorkSession");
-const auth = require("../middleware/authMiddleware");
-
 const router = express.Router();
+const auth = require("../middleware/authMiddleware");
+const ActivityLog = require("../models/ActivityLog");
 
-let meetingStart = {};
+router.use(auth);
 
-router.post("/start", auth, async (req, res) => {
-  meetingStart[req.user.userId] = Date.now();
-  res.json({ message: "Meeting mode ON" });
-});
-
-router.post("/end", auth, async (req, res) => {
-  const start = meetingStart[req.user.userId];
-  if (!start) return res.json({ message: "No meeting active" });
-
-  const duration = Date.now() - start;
-
-  const session = await WorkSession.findOne({
-    userId: req.user.userId,
-    endedAt: null,
+router.post("/start", async (req, res) => {
+  await ActivityLog.create({
+    userId: req.userId,
+    type: "MEETING_ON"
   });
 
-  if (session) {
-    session.meetingTimeMs += duration;
-    await session.save();
-  }
+  res.json({ message: "Meeting started" });
+});
 
-  delete meetingStart[req.user.userId];
-  res.json({ message: "Meeting mode OFF" });
+router.post("/end", async (req, res) => {
+  await ActivityLog.create({
+    userId: req.userId,
+    type: "MEETING_OFF"
+  });
+
+  res.json({ message: "Meeting ended" });
 });
 
 module.exports = router;

@@ -1,34 +1,26 @@
 const express = require("express");
-const WorkSession = require("../models/WorkSession");
-const auth = require("../middleware/authMiddleware");
-
 const router = express.Router();
+const auth = require("../middleware/authMiddleware");
+const ActivityLog = require("../models/ActivityLog");
 
-// Start work session
-router.post("/start", auth, async (req, res) => {
-  const session = await WorkSession.create({
-    userId: req.user.userId,
-    startedAt: new Date(),
+router.use(auth);
+
+router.post("/start", async (req, res) => {
+  await ActivityLog.create({
+    userId: req.userId,
+    type: "SESSION_START"
   });
 
-  res.status(201).json(session);
+  res.json({ message: "Session started" });
 });
 
-// End work session
-router.post("/end", auth, async (req, res) => {
-  const session = await WorkSession.findOne({
-    userId: req.user.userId,
-    endedAt: null,
+router.post("/end", async (req, res) => {
+  await ActivityLog.create({
+    userId: req.userId,
+    type: "SESSION_END"
   });
 
-  if (!session) {
-    return res.status(404).json({ message: "No active session" });
-  }
-
-  session.endedAt = new Date();
-  await session.save();
-
-  res.json(session);
+  res.json({ message: "Session ended" });
 });
 
 module.exports = router;
