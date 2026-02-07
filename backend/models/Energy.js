@@ -29,3 +29,4 @@ const energySchema = new mongoose.Schema(
 );
 
 module.exports = mongoose.model("Energy", energySchema);
+
