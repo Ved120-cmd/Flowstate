@@ -121,10 +121,15 @@ try {
 }
 
 try {
-  velocityRoutes = require("./routes/velocity");
-  console.log("✅ Velocity routes loaded");
+  velocityRoutes = require("./routes/mlvelocity");
+  console.log("✅ ML Velocity routes loaded (personalized suggestions)");
 } catch (err) {
-  console.warn("⚠️  Velocity routes not found (optional)");
+  try {
+    velocityRoutes = require("./routes/velocity");
+    console.log("✅ Velocity routes loaded");
+  } catch (err2) {
+    console.warn("⚠️  Velocity routes not found (optional)");
+  }
 }
 
 /* =======================

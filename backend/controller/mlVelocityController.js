@@ -152,23 +152,23 @@ class MLVelocityController {
 
   /**
    * GET /api/velocity/personalized
-   * Get personalized velocity and recommendations using ML
+   * Get personalized velocity and recommendations using ML (userId from JWT or query)
    */
   getPersonalizedVelocity = async (req, res) => {
     try {
-      const { userId } = req.query;
-      
+      const userId = (req.userId && req.userId.toString()) || req.query.userId;
       if (!userId) {
         return res.status(400).json({
-          error: 'userId is required'
+          error: 'userId is required (auth token or query)'
         });
       }
+      const userIdStr = String(userId);
       
       // Get current metrics
-      const metrics = this.engagementTracker.getCurrentMetrics(userId);
+      const metrics = this.engagementTracker.getCurrentMetrics(userIdStr);
       
       // Get ML model
-      const mlModel = await this.getMLModel(userId);
+      const mlModel = await this.getMLModel(userIdStr);
       
       // Get current hour for temporal recommendations
       const currentHour = new Date().getHours();
@@ -179,7 +179,7 @@ class MLVelocityController {
       // Save model state to database
       const modelState = await mlModel.saveModel();
       await MLModel.findOneAndUpdate(
-        { userId },
+        { userId: userIdStr },
         { $set: modelState },
         { upsert: true, new: true }
       );

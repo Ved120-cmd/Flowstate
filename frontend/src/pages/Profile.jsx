@@ -41,9 +41,9 @@ export default function Profile() {
     fetchProfile();
   }, []);
 
-  const fetchProfile = async () => {
+  const fetchProfile = async (silent = false) => {
     try {
-      setIsLoading(true);
+      if (!silent) setIsLoading(true);
       const response = await authAPI.getProfile();
       const userData = response.data.user;
       
@@ -133,6 +133,35 @@ export default function Profile() {
     return sensitivityMap[sensitivity.toLowerCase()] || sensitivity;
   };
 
+  // Reverse mapping: convert display values back to backend enum values for PUT /profile
+  const toBackendWorkMode = (v) => {
+    if (!v || !v.trim()) return undefined;
+    const s = v.trim();
+    if (/work from home|wfh/i.test(s)) return 'wfh';
+    if (/work from office|wfo/i.test(s)) return 'wfo';
+    if (/hybrid/i.test(s)) return 'hybrid';
+    return v;
+  };
+  const toBackendScheduleType = (v) => {
+    if (!v) return 'flexible';
+    return v.trim().toLowerCase() === 'fixed' ? 'Fixed' : 'Flexible';
+  };
+  const toBackendWorkIntensity = (v) => {
+    if (!v || !v.trim()) return undefined;
+    const map = { 'Deep focus': 'Deep focus sessions', 'Frequent switching': 'Task switching', 'Balanced': 'balanced' };
+    return map[v.trim()] || (v.trim().toLowerCase() === 'balanced' ? 'balanced' : v);
+  };
+  const toBackendNudgeSensitivity = (v) => {
+    if (!v) return 'Balanced';
+    const map = { 'Minimal': 'Minimal', 'Balanced': 'Balanced', 'Active guidance': 'Active guidance' };
+    return map[v.trim()] || v;
+  };
+  const toBackendWorkdayGoal = (v) => {
+    if (!v || !v.trim()) return undefined;
+    const map = { 'Calm & steady': 'Calm & steady', 'High-output': 'High output', 'Balanced': 'Balanced' };
+    return map[v.trim()] || (v.trim() === 'High output' ? 'High output' : v);
+  };
+
   const startEditing = (field, value) => {
     setEditingField(field);
     setTempValue(value);
@@ -140,33 +169,21 @@ export default function Profile() {
 
   const saveEdit = async (field) => {
     try {
+      setError('');
       const updatedProfile = { ...profile, [field]: tempValue };
-      
-      // Prepare data for backend
-      const updateData = {
-        displayName: updatedProfile.displayName,
-        workMode: updatedProfile.workMode,
-        workHours: {
-          start: updatedProfile.startTime,
-          end: updatedProfile.endTime
-        },
-        scheduleType: updatedProfile.scheduleType,
-        taskComplexity: updatedProfile.taskComplexity,
-        workIntensity: updatedProfile.workIntensity,
-        workdayGoal: updatedProfile.workdayGoal,
-        nudgeSensitivity: updatedProfile.nudgeSensitivity,
-        flowLockEnabled: updatedProfile.flowLockEnabled
-      };
+      const updateData = buildProfilePayload(updatedProfile);
 
       await authAPI.updateProfile(updateData);
-      
+
       setProfile(updatedProfile);
       setEditingField(null);
       setTempValue("");
       showSuccessMessage();
+      await fetchProfile(true);
     } catch (err) {
       console.error('Error saving edit:', err);
-      setError('Failed to save changes');
+      const msg = err.response?.data?.error || err.response?.data?.message || err.message || 'Failed to save changes';
+      setError(msg);
     }
   };
 
@@ -180,29 +197,67 @@ export default function Profile() {
     setTimeout(() => setShowSaveSuccess(false), 3000);
   };
 
+  const buildProfilePayload = (p) => {
+      const workMode = toBackendWorkMode(p.workMode) ?? p.workMode;
+      const workIntensity = toBackendWorkIntensity(p.workIntensity) ?? p.workIntensity;
+      const workdayGoal = toBackendWorkdayGoal(p.workdayGoal) ?? p.workdayGoal;
+      const payload = {
+        displayName: (p.displayName ?? '').trim(),
+        workHours: {
+          start: p.startTime || '09:00',
+          end: p.endTime || '17:00'
+        },
+        scheduleType: toBackendScheduleType(p.scheduleType),
+        nudgeSensitivity: toBackendNudgeSensitivity(p.nudgeSensitivity),
+        flowLockEnabled: Boolean(p.flowLockEnabled)
+      };
+      if (workMode != null && workMode !== '') payload.workMode = workMode;
+      if (p.taskComplexity != null && p.taskComplexity !== '') payload.taskComplexity = p.taskComplexity;
+      if (workIntensity != null && workIntensity !== '') payload.workIntensity = workIntensity;
+      if (workdayGoal != null && workdayGoal !== '') payload.workdayGoal = workdayGoal;
+      return payload;
+    };
+
   const handleSaveAll = async () => {
     try {
-      const updateData = {
-        displayName: profile.displayName,
-        workMode: profile.workMode,
-        workHours: {
-          start: profile.startTime,
-          end: profile.endTime
-        },
-        scheduleType: profile.scheduleType,
-        taskComplexity: profile.taskComplexity,
-        workIntensity: profile.workIntensity,
-        workdayGoal: profile.workdayGoal,
-        nudgeSensitivity: profile.nudgeSensitivity,
-        flowLockEnabled: profile.flowLockEnabled
-      };
+      setError('');
+      const updateData = buildProfilePayload(profile);
 
-      await authAPI.updateProfile(updateData);
+      const response = await authAPI.updateProfile(updateData);
+      if (response?.data?.user) {
+        const saved = response.data.user;
+        setProfile({
+          displayName: saved.displayName ?? '',
+          email: profile.email,
+          workMode: saved.workMode != null ? (mapWorkMode(saved.workMode) || saved.workMode) : profile.workMode,
+          startTime: saved.workHours?.start ?? profile.startTime,
+          endTime: saved.workHours?.end ?? profile.endTime,
+          scheduleType: mapScheduleType(saved.scheduleType),
+          taskComplexity: mapTaskComplexity(saved.taskComplexity) ?? profile.taskComplexity,
+          workIntensity: mapWorkIntensity(saved.workIntensity) ?? profile.workIntensity,
+          workdayGoal: mapWorkdayGoal(saved.workdayGoal) ?? profile.workdayGoal,
+          nudgeSensitivity: mapNudgeSensitivity(saved.nudgeSensitivity),
+          flowLockEnabled: saved.flowLockEnabled ?? true,
+        });
+      }
+      if (profile.displayName?.trim()) {
+        localStorage.setItem('displayName', profile.displayName.trim());
+        try {
+          const userJson = localStorage.getItem('user');
+          if (userJson) {
+            const user = JSON.parse(userJson);
+            user.displayName = profile.displayName.trim();
+            localStorage.setItem('user', JSON.stringify(user));
+          }
+        } catch (_) {}
+      }
       showSuccessMessage();
       console.log("Saved profile:", updateData);
+      await fetchProfile(true);
     } catch (err) {
       console.error('Error saving profile:', err);
-      setError('Failed to save profile');
+      const msg = err.response?.data?.error || err.response?.data?.message || err.message || 'Failed to save profile';
+      setError(msg);
     }
   };
 
