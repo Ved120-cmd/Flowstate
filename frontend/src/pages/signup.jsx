@@ -77,7 +77,7 @@ const SignUp = () => {
 
     try {
       // Call backend to verify OTP
-      const response = await authAPI.verifyOTP(email, otpCode);
+      const response = await authAPI.verifyOTP(email, otpCode, displayName.trim());
       console.log('OTP Verification Response:', response.data);
       
       // Store token and user data

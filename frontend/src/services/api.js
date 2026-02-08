@@ -41,7 +41,7 @@ api.interceptors.response.use(
 // Auth endpoints
 export const authAPI = {
   requestOTP: (email) => api.post('/auth/request-otp', { email }),
-  verifyOTP: (email, otp) => api.post('/auth/verify-otp', { email, otp }),
+  verifyOTP: (email, otp, displayName) => api.post('/auth/verify-otp', { email, otp, displayName }),
   savePreferences: (preferences) => api.post('/auth/save-preferences', preferences),
   getProfile: () => api.get('/auth/profile'),
   updateProfile: (profileData) => api.put('/auth/profile', profileData),
@@ -80,10 +80,12 @@ export const analyticsAPI = {
   getInsights: () => api.get('/analytics/insights'),
 };
 
-// Velocity endpoints
+// Velocity endpoints (ML-powered when using mlvelocity backend)
 export const velocityAPI = {
   getCurrent: () => api.get('/velocity/current'),
   getHistory: () => api.get('/velocity/history'),
+  getPersonalized: () => api.get('/velocity/personalized'),
+  sendInterventionFeedback: (data) => api.post('/intervention/feedback', data),
 };
 
 export default api;

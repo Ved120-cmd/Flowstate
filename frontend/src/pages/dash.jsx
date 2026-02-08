@@ -33,7 +33,8 @@ import {
   Plus
 } from 'lucide-react';
 import '../App.css';
-import CardNav from './CardNav'; 
+import CardNav from './CardNav';
+import { velocityAPI } from '../services/api'; 
 
 // Main Dash Component
 const Dash = () => {
@@ -46,6 +47,11 @@ const Dash = () => {
   const [flowLockTimer, setFlowLockTimer] = useState(0);
   const [inMeeting, setInMeeting] = useState(false);
   const [workMode, setWorkMode] = useState('');
+  const [mindfulSuggestions, setMindfulSuggestions] = useState([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(true);
+  const [suggestionsError, setSuggestionsError] = useState(null);
+  const [selectedSuggestion, setSelectedSuggestion] = useState(null);
+  const [displayName, setDisplayName] = useState('');
   
   const [newTask, setNewTask] = useState({
     title: '',
@@ -110,7 +116,7 @@ const Dash = () => {
     { time: '5pm', focus: 20 },
   ];
 
-  // Load user preferences on component mount
+  // Load user preferences and display name on component mount
   useEffect(() => {
     const preferences = localStorage.getItem('flowstate_preferences');
     if (preferences) {
@@ -121,6 +127,53 @@ const Dash = () => {
         setWorkMode('remote');
       }
     }
+    // Name: signup stores 'displayName'; profile may store user with displayName
+    const fromStorage = localStorage.getItem('displayName');
+    if (fromStorage?.trim()) {
+      setDisplayName(fromStorage.trim());
+      return;
+    }
+    try {
+      const userJson = localStorage.getItem('user');
+      if (userJson) {
+        const user = JSON.parse(userJson);
+        if (user?.displayName?.trim()) setDisplayName(user.displayName.trim());
+      }
+    } catch (_) {}
+  }, []);
+
+  // Fetch personalized mindful suggestions from online learning model
+  useEffect(() => {
+    let cancelled = false;
+    setSuggestionsLoading(true);
+    setSuggestionsError(null);
+    velocityAPI
+      .getPersonalized()
+      .then((res) => {
+        if (cancelled) return;
+        const data = res.data;
+        setMindfulSuggestions(Array.isArray(data?.suggestions) ? data.suggestions : []);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setSuggestionsError(err.response?.data?.error || err.message || 'Could not load suggestions');
+        setMindfulSuggestions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setSuggestionsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Refetch suggestions every 2 minutes so they stay relevant
+  useEffect(() => {
+    const interval = setInterval(() => {
+      velocityAPI.getPersonalized().then((res) => {
+        const data = res.data;
+        setMindfulSuggestions(Array.isArray(data?.suggestions) ? data.suggestions : []);
+      }).catch(() => {});
+    }, 120000);
+    return () => clearInterval(interval);
   }, []);
 
   // Update time every minute
@@ -355,7 +408,7 @@ const Dash = () => {
         <header className="dashboard-header">
           <div className="header-greeting">
             <div className="greeting-content">
-              <h1 className="header-title">Welcome back, Alex</h1>
+              <h1 className="header-title">Welcome back, {displayName || 'there'}</h1>
               <div className="header-nudge">
                 <Heart className="nudge-icon" style={{ width: '16px', height: '16px', color: '#88c9a1' }} />
                 {nudges[nudgeIndex]}
@@ -456,7 +509,7 @@ const Dash = () => {
             </div>
           </div>
 
-          {/* SUGGESTIONS CARD */}
+          {/* SUGGESTIONS CARD - Personalized by online learning model */}
           <div className="bento-card suggestions-card">
             <div className="card-header">
               <div className="header-icon-wrapper">
@@ -464,30 +517,57 @@ const Dash = () => {
               </div>
               <div className="header-text">
                 <h3>Mindful Suggestions</h3>
-                <span className="header-badge">For You</span>
+                <span className="header-badge">Personalized</span>
               </div>
             </div>
             <div className="suggestions-list">
-              <div className="suggestion-item green">
-                <div className="suggestion-icon-wrapper">
-                  <Feather className="suggestion-icon" />
+              {suggestionsLoading ? (
+                <div className="suggestion-loading">Loading suggestions…</div>
+              ) : suggestionsError ? (
+                <div className="suggestion-error">{suggestionsError}</div>
+              ) : mindfulSuggestions.length === 0 ? (
+                <div className="suggestion-item green">
+                  <div className="suggestion-icon-wrapper">
+                    <Feather className="suggestion-icon" />
+                  </div>
+                  <div className="suggestion-content">
+                    <div className="suggestion-title">You're in good flow</div>
+                    <div className="suggestion-desc">No specific nudge right now. Keep going mindfully.</div>
+                  </div>
+                  <div className="suggestion-action">→</div>
                 </div>
-                <div className="suggestion-content">
-                  <div className="suggestion-title">Light Task Match</div>
-                  <div className="suggestion-desc">Documentation aligns with calm energy</div>
-                </div>
-                <div className="suggestion-action">→</div>
-              </div>
-              <div className="suggestion-item yellow">
-                <div className="suggestion-icon-wrapper">
-                  <Wind className="suggestion-icon" />
-                </div>
-                <div className="suggestion-content">
-                  <div className="suggestion-title">Breathing Space</div>
-                  <div className="suggestion-desc">Take 5 mindful breaths in 30 min</div>
-                </div>
-                <div className="suggestion-action">→</div>
-              </div>
+              ) : (
+                mindfulSuggestions.map((s, i) => {
+                  const isBreak = s.type === 'TAKE_BREAK';
+                  const isPeak = s.type === 'PEAK_HOUR';
+                  const isLowEnergy = s.type === 'LOW_ENERGY_HOUR';
+                  const Icon = isBreak ? Wind : isPeak ? Zap : Feather;
+                  const colorClass = isPeak ? 'green' : 'yellow';
+                  const title = isBreak ? 'Take a break' : isPeak ? 'Peak hour' : isLowEnergy ? 'Low energy hour' : s.type || 'Suggestion';
+                  return (
+                    <div
+                      key={i}
+                      className={`suggestion-item ${colorClass}`}
+                      onClick={() => setSelectedSuggestion(selectedSuggestion?.message === s.message ? null : s)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => e.key === 'Enter' && setSelectedSuggestion(selectedSuggestion?.message === s.message ? null : s)}
+                    >
+                      <div className="suggestion-icon-wrapper">
+                        <Icon className="suggestion-icon" />
+                      </div>
+                      <div className="suggestion-content">
+                        <div className="suggestion-title">{title}</div>
+                        <div className="suggestion-desc">{s.message}</div>
+                        {selectedSuggestion?.message === s.message && (
+                          <div className="suggestion-reason">Why: based on your personal baseline (explanation coming soon)</div>
+                        )}
+                      </div>
+                      <div className="suggestion-action">→</div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
 

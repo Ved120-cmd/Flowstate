@@ -5,6 +5,7 @@
 
 const express = require('express');
 const MLVelocityController = require('../controller/mlVelocityController');
+const authMiddleware = require('../middleware/authMiddleware');
 
 const router = express.Router();
 const mlVelocityController = new MLVelocityController();
@@ -18,8 +19,8 @@ router.post('/error', mlVelocityController.recordError);
 router.get('/velocity/current', mlVelocityController.getCurrentVelocity);
 router.get('/velocity/state', mlVelocityController.getVelocityState);
 
-// NEW: ML-powered personalized endpoints
-router.get('/velocity/personalized', mlVelocityController.getPersonalizedVelocity);
+// ML-powered personalized suggestions (uses JWT userId)
+router.get('/velocity/personalized', authMiddleware, mlVelocityController.getPersonalizedVelocity);
 router.post('/intervention/feedback', mlVelocityController.recordInterventionFeedback);
 
 // ML model management

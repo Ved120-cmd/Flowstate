@@ -64,7 +64,7 @@ router.post("/verify-otp", async (req, res) => {
   try {
     console.log("🔐 Verify OTP - Received:", req.body);
     
-    const { email, otp } = req.body;
+    const { email, otp, displayName } = req.body;
 
     if (!email || !otp) {
       return res.status(400).json({ message: "Email and OTP are required" });
@@ -84,6 +84,10 @@ router.post("/verify-otp", async (req, res) => {
 
     console.log("✅ OTP verified for:", email);
 
+    // Save display name if provided (from signup)
+    if (displayName && typeof displayName === "string" && displayName.trim()) {
+      user.displayName = displayName.trim();
+    }
     // Clear OTP
     user.otp = undefined;
     user.otpExpiry = undefined;
@@ -243,18 +247,21 @@ router.put("/profile", authMiddleware, async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // Update only allowed fields
-    const allowedUpdates = [
-      'displayName', 'workMode', 'workHours', 'scheduleType',
-      'taskComplexity', 'workIntensity', 'nudgeSensitivity',
-      'workdayGoal', 'flowLockEnabled'
-    ];
+    // Update only allowed fields (set explicitly so Mongoose persists)
+    if (updates.displayName !== undefined) user.displayName = updates.displayName;
+    if (updates.workMode !== undefined) user.workMode = updates.workMode;
+    if (updates.scheduleType !== undefined) user.scheduleType = updates.scheduleType;
+    if (updates.taskComplexity !== undefined) user.taskComplexity = updates.taskComplexity;
+    if (updates.workIntensity !== undefined) user.workIntensity = updates.workIntensity;
+    if (updates.nudgeSensitivity !== undefined) user.nudgeSensitivity = updates.nudgeSensitivity;
+    if (updates.workdayGoal !== undefined) user.workdayGoal = updates.workdayGoal;
+    if (updates.flowLockEnabled !== undefined) user.flowLockEnabled = updates.flowLockEnabled;
 
-    allowedUpdates.forEach(field => {
-      if (updates[field] !== undefined) {
-        user[field] = updates[field];
-      }
-    });
+    if (updates.workHours && typeof updates.workHours === 'object') {
+      user.workHours.start = updates.workHours.start ?? user.workHours?.start ?? '09:00';
+      user.workHours.end = updates.workHours.end ?? user.workHours?.end ?? '17:00';
+      user.markModified('workHours');
+    }
 
     await user.save();
     console.log("✅ Profile updated successfully");
@@ -277,9 +284,10 @@ router.put("/profile", authMiddleware, async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Error updating profile:", error);
-    res.status(500).json({ 
-      message: "Failed to update profile",
-      error: error.message 
+    const isValidation = error.name === "ValidationError";
+    res.status(isValidation ? 400 : 500).json({
+      message: isValidation ? "Invalid profile data" : "Failed to update profile",
+      error: error.message
     });
   }
 });
