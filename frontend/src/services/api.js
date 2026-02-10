@@ -38,6 +38,16 @@ api.interceptors.response.use(
   }
 );
 
+// Get user ID from token or localStorage
+const getUserId = () => {
+  try {
+    const user = JSON.parse(localStorage.getItem('user'));
+    return user?.id || null;
+  } catch {
+    return null;
+  }
+};
+
 // Auth endpoints
 export const authAPI = {
   requestOTP: (email) => api.post('/auth/request-otp', { email }),
@@ -82,10 +92,170 @@ export const analyticsAPI = {
 
 // Velocity endpoints (ML-powered when using mlvelocity backend)
 export const velocityAPI = {
-  getCurrent: () => api.get('/velocity/current'),
-  getHistory: () => api.get('/velocity/history'),
+  // Record activity (automatically trains ML model)
+  recordActivity: (activityType, data = {}) => {
+    const userId = getUserId();
+    if (!userId) {
+      return Promise.reject(new Error('User ID not found. Please log in.'));
+    }
+    return api.post('/activity', {
+      userId,
+      activityType,
+      data,
+      timestamp: Date.now()
+    });
+  },
+
+  // Record task completion (trains ML model with task data)
+  recordTaskCompletion: (taskId, duration, complexity = 'medium') => {
+    const userId = getUserId();
+    if (!userId) {
+      return Promise.reject(new Error('User ID not found. Please log in.'));
+    }
+    return api.post('/task/complete', {
+      userId,
+      taskId,
+      duration,
+      complexity,
+      timestamp: Date.now()
+    });
+  },
+
+  // Record task start
+  recordTaskStart: (taskId, complexity = 'medium') => {
+    const userId = getUserId();
+    if (!userId) {
+      return Promise.reject(new Error('User ID not found. Please log in.'));
+    }
+    return api.post('/activity', {
+      userId,
+      activityType: 'task_start',
+      data: { taskId, complexity },
+      timestamp: Date.now()
+    });
+  },
+
+  // Record task pause
+  recordTaskPause: (taskId) => {
+    const userId = getUserId();
+    if (!userId) {
+      return Promise.reject(new Error('User ID not found. Please log in.'));
+    }
+    return api.post('/activity', {
+      userId,
+      activityType: 'task_pause',
+      data: { taskId },
+      timestamp: Date.now()
+    });
+  },
+
+  // Record error event
+  recordError: (errorType, errorData = {}) => {
+    const userId = getUserId();
+    if (!userId) {
+      return Promise.reject(new Error('User ID not found. Please log in.'));
+    }
+    return api.post('/error', {
+      userId,
+      errorType,
+      errorData,
+      timestamp: Date.now()
+    });
+  },
+
+  // Get personalized velocity and recommendations (ML-powered)
+  // Uses JWT userId from auth middleware, no need to pass userId param
   getPersonalized: () => api.get('/velocity/personalized'),
-  sendInterventionFeedback: (data) => api.post('/intervention/feedback', data),
+
+  // Get current velocity (legacy, non-ML) - requires userId param
+  getCurrent: () => {
+    const userId = getUserId();
+    if (!userId) {
+      return Promise.reject(new Error('User ID not found. Please log in.'));
+    }
+    return api.get('/velocity/current', {
+      params: { userId }
+    });
+  },
+
+  // Get velocity state
+  getState: () => {
+    const userId = getUserId();
+    if (!userId) {
+      return Promise.reject(new Error('User ID not found. Please log in.'));
+    }
+    return api.get('/velocity/state', {
+      params: { userId }
+    });
+  },
+
+  // Get ML model state (for debugging)
+  getModelState: () => {
+    const userId = getUserId();
+    if (!userId) {
+      return Promise.reject(new Error('User ID not found. Please log in.'));
+    }
+    return api.get('/ml/model/state', {
+      params: { userId }
+    });
+  },
+
+  // Record intervention feedback (helps ML model learn)
+  recordInterventionFeedback: (interventionType, accepted, velocityBefore, velocityAfter) => {
+    const userId = getUserId();
+    if (!userId) {
+      return Promise.reject(new Error('User ID not found. Please log in.'));
+    }
+    return api.post('/intervention/feedback', {
+      userId,
+      interventionType,
+      accepted,
+      velocityBefore,
+      velocityAfter,
+      timestamp: Date.now()
+    });
+  },
+
+  // Reset ML model (start fresh learning)
+  resetModel: () => {
+    const userId = getUserId();
+    if (!userId) {
+      return Promise.reject(new Error('User ID not found. Please log in.'));
+    }
+    return api.post('/ml/model/reset', { userId });
+  },
+
+  // Reset session
+  resetSession: () => {
+    const userId = getUserId();
+    if (!userId) {
+      return Promise.reject(new Error('User ID not found. Please log in.'));
+    }
+    return api.post('/session/reset', { userId });
+  },
+
+  // Check if idle
+  checkIdle: () => {
+    const userId = getUserId();
+    if (!userId) {
+      return Promise.reject(new Error('User ID not found. Please log in.'));
+    }
+    return api.get('/idle/check', {
+      params: { userId }
+    });
+  },
+
+  // Legacy: sendInterventionFeedback (kept for backwards compatibility)
+  sendInterventionFeedback: (data) => {
+    const userId = getUserId();
+    if (!userId) {
+      return Promise.reject(new Error('User ID not found. Please log in.'));
+    }
+    return api.post('/intervention/feedback', {
+      userId,
+      ...data
+    });
+  },
 };
 
 export default api;

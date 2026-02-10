@@ -1,6 +1,6 @@
 /**
- * ML Model Schema for MongoDB
- * Stores user-specific ML models for personalized velocity tracking
+ * ML Model Schema (MongoDB/Mongoose)
+ * Stores the online learning model state for persistence
  */
 
 const mongoose = require('mongoose');
@@ -13,29 +13,23 @@ const mlModelSchema = new mongoose.Schema({
     index: true
   },
   
-  // Personalized weights
+  // Personalized weights (learned through gradient descent)
   personalizedWeights: {
     alpha: {
       type: Number,
-      default: 0.4,
-      min: 0,
-      max: 1
+      default: 0.4
     },
     beta: {
       type: Number,
-      default: 0.35,
-      min: 0,
-      max: 1
+      default: 0.35
     },
     gamma: {
       type: Number,
-      default: 0.25,
-      min: 0,
-      max: 1
+      default: 0.25
     }
   },
   
-  // Personalized thresholds
+  // Adaptive thresholds (personalized for each user)
   personalizedThresholds: {
     velocityDropThreshold: {
       type: Number,
@@ -86,25 +80,30 @@ const mlModelSchema = new mongoose.Schema({
       type: Number,
       default: null
     },
-    velocityTrend: [{
-      timestamp: Date,
-      velocity: Number
-    }],
+    velocityTrend: {
+      type: [
+        {
+          timestamp: Date,
+          velocity: Number
+        }
+      ],
+      default: []
+    },
     errorPatterns: {
       type: Map,
       of: Number,
       default: {}
     },
     interventionSuccess: {
-      TAKE_BREAK: {
+      type: Map,
+      of: {
         accepted: { type: Number, default: 0 },
         rejected: { type: Number, default: 0 },
         effectiveness: { type: Number, default: 0 }
       },
-      SWITCH_TASK: {
-        accepted: { type: Number, default: 0 },
-        rejected: { type: Number, default: 0 },
-        effectiveness: { type: Number, default: 0 }
+      default: {
+        'TAKE_BREAK': { accepted: 0, rejected: 0, effectiveness: 0 },
+        'SWITCH_TASK': { accepted: 0, rejected: 0, effectiveness: 0 }
       }
     },
     totalSessions: {
@@ -122,19 +121,17 @@ const mlModelSchema = new mongoose.Schema({
   },
   
   // Model metadata
-  isInitialized: {
-    type: Boolean,
-    default: false
-  },
   dataPointsCollected: {
     type: Number,
     default: 0
   },
-  lastUpdate: {
-    type: Date,
-    default: Date.now
+  
+  isInitialized: {
+    type: Boolean,
+    default: false
   },
-  createdAt: {
+  
+  lastUpdate: {
     type: Date,
     default: Date.now
   }
@@ -142,39 +139,135 @@ const mlModelSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Static method to get or create model for user
+// Index for efficient queries
+mlModelSchema.index({ userId: 1 });
+mlModelSchema.index({ lastUpdate: -1 });
+
+// Static methods
+
+/**
+ * Get or create ML model for user
+ */
 mlModelSchema.statics.getOrCreateModel = async function(userId) {
   let model = await this.findOne({ userId });
   
   if (!model) {
-    model = await this.create({ userId });
+    model = await this.create({
+      userId,
+      personalizedWeights: {
+        alpha: 0.4,
+        beta: 0.35,
+        gamma: 0.25
+      },
+      personalizedThresholds: {
+        velocityDropThreshold: 0.70,
+        errorRateMultiplier: 2.0,
+        consecutiveDropsRequired: 2,
+        breakDurationMinutes: 5,
+        optimalVelocityRange: [60, 85]
+      },
+      userProfile: {
+        peakHours: [],
+        lowEnergyHours: [],
+        averageTaskDuration: 15,
+        preferredComplexity: 'medium',
+        breakFrequency: 90,
+        baselineVelocity: null,
+        velocityTrend: [],
+        errorPatterns: {},
+        interventionSuccess: {
+          'TAKE_BREAK': { accepted: 0, rejected: 0, effectiveness: 0 },
+          'SWITCH_TASK': { accepted: 0, rejected: 0, effectiveness: 0 }
+        },
+        totalSessions: 0,
+        totalWorkTime: 0,
+        averageSessionLength: 0
+      },
+      dataPointsCollected: 0,
+      isInitialized: false,
+      lastUpdate: Date.now()
+    });
   }
   
   return model;
 };
 
-// Instance method to update with new data point
-mlModelSchema.methods.recordDataPoint = function(dataPoint) {
-  this.dataPointsCollected++;
+/**
+ * Update model state
+ */
+mlModelSchema.statics.updateModel = async function(userId, modelState) {
+  return this.findOneAndUpdate(
+    { userId },
+    { 
+      $set: {
+        ...modelState,
+        lastUpdate: Date.now()
+      }
+    },
+    { upsert: true, new: true }
+  );
+};
+
+/**
+ * Get model statistics
+ */
+mlModelSchema.statics.getModelStats = async function(userId) {
+  const model = await this.findOne({ userId });
   
-  // Update velocity trend (keep last 100)
-  this.userProfile.velocityTrend.push({
-    timestamp: dataPoint.timestamp,
-    velocity: dataPoint.velocity
-  });
-  
-  if (this.userProfile.velocityTrend.length > 100) {
-    this.userProfile.velocityTrend.shift();
+  if (!model) {
+    return null;
   }
   
-  // Update baseline velocity (moving average)
-  if (this.userProfile.baselineVelocity === null) {
-    this.userProfile.baselineVelocity = dataPoint.velocity;
-  } else {
-    this.userProfile.baselineVelocity = 
-      0.95 * this.userProfile.baselineVelocity + 0.05 * dataPoint.velocity;
-  }
+  return {
+    userId: model.userId,
+    isInitialized: model.isInitialized,
+    dataPointsCollected: model.dataPointsCollected,
+    lastUpdate: model.lastUpdate,
+    baselineVelocity: model.userProfile.baselineVelocity,
+    peakHours: model.userProfile.peakHours,
+    lowEnergyHours: model.userProfile.lowEnergyHours,
+    optimalRange: model.personalizedThresholds.optimalVelocityRange
+  };
+};
+
+/**
+ * Reset model to defaults
+ */
+mlModelSchema.methods.resetToDefaults = async function() {
+  this.personalizedWeights = {
+    alpha: 0.4,
+    beta: 0.35,
+    gamma: 0.25
+  };
   
+  this.personalizedThresholds = {
+    velocityDropThreshold: 0.70,
+    errorRateMultiplier: 2.0,
+    consecutiveDropsRequired: 2,
+    breakDurationMinutes: 5,
+    optimalVelocityRange: [60, 85]
+  };
+  
+  this.userProfile = {
+    peakHours: [],
+    lowEnergyHours: [],
+    averageTaskDuration: 15,
+    preferredComplexity: 'medium',
+    breakFrequency: 90,
+    baselineVelocity: null,
+    velocityTrend: [],
+    errorPatterns: {},
+    interventionSuccess: {
+      'TAKE_BREAK': { accepted: 0, rejected: 0, effectiveness: 0 },
+      'SWITCH_TASK': { accepted: 0, rejected: 0, effectiveness: 0 }
+    },
+    totalSessions: 0,
+    totalWorkTime: 0,
+    averageSessionLength: 0
+  };
+  
+  this.dataPointsCollected = 0;
+  this.isInitialized = false;
   this.lastUpdate = Date.now();
   
   return this.save();
