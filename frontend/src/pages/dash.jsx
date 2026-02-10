@@ -1,4 +1,4 @@
-// dash.jsx
+// dash.jsx - Integrated with ML Model (Updates every 10 seconds)
 import React, { useState, useEffect } from 'react'; 
 import { 
   AreaChart, Area, 
@@ -28,18 +28,46 @@ import {
   Lock,
   Target,
   Shield,
-  BarChart3,
   Users,
-  Plus
+  Plus,
+  Activity
 } from 'lucide-react';
 import '../App.css';
 import CardNav from './CardNav';
-import { velocityAPI } from '../services/api'; 
+import { useMLVelocity } from '../hooks/useMLVelocity';
 
-// Main Dash Component
+// Main Dash Component with ML Integration
 const Dash = () => {
+  // ML Velocity Hook - Polls model every 10 seconds
+  const {
+    velocity: mlVelocity,
+    suggestions: mlSuggestions,
+    modelState,
+    loading: mlLoading,
+    error: mlError,
+    isPolling,
+    recordTaskStart,
+    recordTaskComplete,
+    recordTaskPause,
+    recordFeedback
+  } = useMLVelocity({
+    pollingInterval: 10000, // 10 seconds
+    autoStart: true,
+    onSuggestion: (suggestions) => {
+      console.log('📬 New ML suggestions:', suggestions);
+      // Show toast for high-priority suggestions
+      if (suggestions.some(s => s.priority === 'high')) {
+        setShowToast(true);
+      }
+    },
+    onVelocityChange: (newVel, oldVel) => {
+      console.log(`📊 Velocity updated: ${oldVel?.toFixed(1)} → ${newVel.toFixed(1)}`);
+    }
+  });
+
+  // State
   const [energy, setEnergy] = useState(75);
-  const [showToast, setShowToast] = useState(true);
+  const [showToast, setShowToast] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [nudgeIndex, setNudgeIndex] = useState(0);
   const [showAddTask, setShowAddTask] = useState(false);
@@ -47,11 +75,9 @@ const Dash = () => {
   const [flowLockTimer, setFlowLockTimer] = useState(0);
   const [inMeeting, setInMeeting] = useState(false);
   const [workMode, setWorkMode] = useState('');
-  const [mindfulSuggestions, setMindfulSuggestions] = useState([]);
-  const [suggestionsLoading, setSuggestionsLoading] = useState(true);
-  const [suggestionsError, setSuggestionsError] = useState(null);
-  const [selectedSuggestion, setSelectedSuggestion] = useState(null);
   const [displayName, setDisplayName] = useState('');
+  const [dismissedSuggestions, setDismissedSuggestions] = useState(new Set());
+  const [lastDismissTime, setLastDismissTime] = useState(null);
   
   const [newTask, setNewTask] = useState({
     title: '',
@@ -116,6 +142,13 @@ const Dash = () => {
     { time: '5pm', focus: 20 },
   ];
 
+  // Sync energy with ML velocity
+  useEffect(() => {
+    if (mlVelocity !== null && !isNaN(mlVelocity)) {
+      setEnergy(Math.round(Math.min(100, Math.max(0, mlVelocity))));
+    }
+  }, [mlVelocity]);
+
   // Load user preferences and display name on component mount
   useEffect(() => {
     const preferences = localStorage.getItem('flowstate_preferences');
@@ -127,7 +160,6 @@ const Dash = () => {
         setWorkMode('remote');
       }
     }
-    // Name: signup stores 'displayName'; profile may store user with displayName
     const fromStorage = localStorage.getItem('displayName');
     if (fromStorage?.trim()) {
       setDisplayName(fromStorage.trim());
@@ -140,40 +172,6 @@ const Dash = () => {
         if (user?.displayName?.trim()) setDisplayName(user.displayName.trim());
       }
     } catch (_) {}
-  }, []);
-
-  // Fetch personalized mindful suggestions from online learning model
-  useEffect(() => {
-    let cancelled = false;
-    setSuggestionsLoading(true);
-    setSuggestionsError(null);
-    velocityAPI
-      .getPersonalized()
-      .then((res) => {
-        if (cancelled) return;
-        const data = res.data;
-        setMindfulSuggestions(Array.isArray(data?.suggestions) ? data.suggestions : []);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setSuggestionsError(err.response?.data?.error || err.message || 'Could not load suggestions');
-        setMindfulSuggestions([]);
-      })
-      .finally(() => {
-        if (!cancelled) setSuggestionsLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, []);
-
-  // Refetch suggestions every 2 minutes so they stay relevant
-  useEffect(() => {
-    const interval = setInterval(() => {
-      velocityAPI.getPersonalized().then((res) => {
-        const data = res.data;
-        setMindfulSuggestions(Array.isArray(data?.suggestions) ? data.suggestions : []);
-      }).catch(() => {});
-    }, 120000);
-    return () => clearInterval(interval);
   }, []);
 
   // Update time every minute
@@ -208,13 +206,33 @@ const Dash = () => {
     };
   }, [flowLock, inMeeting]);
 
-  const handleAcceptSuggestion = () => {
+  const handleAcceptSuggestion = async () => {
     setShowToast(false);
+    setLastDismissTime(Date.now());
+    
+    if (mlSuggestions?.length > 0) {
+      setDismissedSuggestions(prev => new Set([...prev, mlSuggestions[0].type]));
+      await recordFeedback(mlSuggestions[0].type, true);
+      
+      // Clear after 5 minutes
+      setTimeout(() => {
+        setDismissedSuggestions(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(mlSuggestions[0].type);
+          return newSet;
+        });
+      }, 5 * 60 * 1000);
+    }
+    
     setEnergy(prev => Math.min(prev + 5, 100));
   };
 
-  const handleDismiss = () => {
+  const handleDismiss = async () => {
     setShowToast(false);
+    // Record rejection to ML model
+    if (mlSuggestions && mlSuggestions.length > 0) {
+      await recordFeedback(mlSuggestions[0].type, false);
+    }
   };
 
   const getTimeOfDay = () => {
@@ -237,7 +255,7 @@ const Dash = () => {
     }
   };
 
-  // Task Management Functions
+  // Task Management Functions with ML Integration
   const handleAddTask = () => {
     if (newTask.title.trim() && newTask.duration.trim()) {
       const task = {
@@ -255,56 +273,63 @@ const Dash = () => {
     }
   };
 
-  const handleStartTask = (taskId) => {
-    if (inMeeting) {
-      return;
-    }
-    setTasks(tasks.map(task => {
-      if (task.id === taskId) {
-        if (task.status === 'Todo') {
-          return { ...task, status: 'In Progress', startTime: new Date(), isPaused: false };
-        }
+  const handleStartTask = async (taskId) => {
+    if (inMeeting) return;
+    
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    
+    setTasks(tasks.map(t => {
+      if (t.id === taskId && t.status === 'Todo') {
+        return { ...t, status: 'In Progress', startTime: new Date(), isPaused: false };
       }
-      return task;
+      return t;
     }));
+
+    // Record task start in ML model
+    await recordTaskStart(taskId, task.complexity.toLowerCase());
   };
 
-  const handlePauseTask = (taskId) => {
-    if (inMeeting) {
-      return;
-    }
+  const handlePauseTask = async (taskId) => {
+    if (inMeeting) return;
+    
     setTasks(tasks.map(task => {
       if (task.id === taskId && task.status === 'In Progress') {
         return { ...task, isPaused: !task.isPaused };
       }
       return task;
     }));
+
+    // Record pause in ML model
+    await recordTaskPause(taskId);
   };
 
-  const handleCompleteTask = (taskId) => {
-    if (inMeeting) {
-      return;
-    }
-    setTasks(tasks.map(task => {
-      if (task.id === taskId) {
-        return { ...task, status: 'Completed' };
+  const handleCompleteTask = async (taskId) => {
+    if (inMeeting) return;
+    
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    
+    setTasks(tasks.map(t => {
+      if (t.id === taskId) {
+        return { ...t, status: 'Completed' };
       }
-      return task;
+      return t;
     }));
+
+    // Record task completion in ML model (this trains the model!)
+    await recordTaskComplete(taskId, task.complexity.toLowerCase());
+    
     setEnergy(prev => Math.min(prev + 3, 100));
   };
 
   const handleDeleteTask = (taskId) => {
-    if (inMeeting) {
-      return;
-    }
+    if (inMeeting) return;
     setTasks(tasks.filter(task => task.id !== taskId));
   };
 
   const toggleFlowLock = () => {
-    if (inMeeting) {
-      return;
-    }
+    if (inMeeting) return;
     setFlowLock(!flowLock);
     if (!flowLock) {
       setShowToast(false);
@@ -326,8 +351,40 @@ const Dash = () => {
 
   const showMeetingButton = workMode === 'office' || workMode === 'hybrid';
 
+  // Use ML suggestions if available
+  const displaySuggestions = mlSuggestions && mlSuggestions.length > 0 ? mlSuggestions : [];
+
   return (
     <div className={`app-container ${flowLock ? 'flow-lock-active' : ''} ${inMeeting ? 'in-meeting-mode' : ''}`}>
+      {/* ML MODEL STATUS INDICATOR (Dev Mode Only) */}
+      {process.env.NODE_ENV === 'development' && (
+        <div style={{
+          position: 'fixed',
+          bottom: '10px',
+          right: '10px',
+          background: modelState.isInitialized ? '#88c9a1' : '#e6b89c',
+          color: 'white',
+          padding: '8px 12px',
+          borderRadius: '8px',
+          fontSize: '11px',
+          zIndex: 10000,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+        }}>
+          <Activity size={14} className={isPolling ? 'pulse' : ''} />
+          <div>
+            <div style={{ fontWeight: 600 }}>
+              ML: {modelState.isInitialized ? 'Active' : 'Learning'}
+            </div>
+            <div style={{ fontSize: '9px', opacity: 0.8 }}>
+              {modelState.dataPointsCollected}/50 • Vel: {mlVelocity?.toFixed(0) || '—'}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MEETING MODE INDICATOR */}
       {inMeeting && !flowLock && (
         <div className="meeting-indicator">
@@ -344,8 +401,8 @@ const Dash = () => {
         </div>
       )}
 
-      {/* TOAST NOTIFICATION */}
-      {showToast && !flowLock && !inMeeting && (
+      {/* TOAST NOTIFICATION - Now using ML suggestions */}
+      {showToast && !flowLock && !inMeeting && displaySuggestions.length > 0 && (
         <div className="toast-notification">
           <div className="toast-content">
             <div className="toast-icon-wrapper">
@@ -355,10 +412,12 @@ const Dash = () => {
             <div className="toast-text">
               <div className="toast-label">
                 <Sparkles className="sparkle-icon" />
-                Gentle Reminder
+                {displaySuggestions[0].type === 'TAKE_BREAK' ? 'Break Suggestion' : 
+                 displaySuggestions[0].type === 'PEAK_HOUR' ? 'Peak Hour Alert' : 
+                 'Mindful Nudge'}
               </div>
               <div className="toast-message">
-                Consider switching to <span className="highlight">"Update Documentation"</span> to maintain calm focus.
+                {displaySuggestions[0].message}
               </div>
             </div>
             <div className="toast-actions">
@@ -390,6 +449,15 @@ const Dash = () => {
             <div className="flow-lock-task">
               {currentTask ? currentTask.title : "No active task selected"}
             </div>
+            {mlVelocity !== null && (
+              <div className="flow-lock-velocity" style={{ 
+                marginTop: '12px', 
+                fontSize: '14px', 
+                opacity: 0.8 
+              }}>
+                Current Velocity: {Math.round(mlVelocity)}%
+              </div>
+            )}
             <div className="flow-lock-affirmation">
               "Calm focus yields the best results"
             </div>
@@ -415,7 +483,6 @@ const Dash = () => {
               </div>
             </div>
             
-            {/* CARD NAV MENU - Now as a separate component */}
             <div className="card-nav-position-wrapper">
               <CardNav />
             </div>
@@ -438,6 +505,13 @@ const Dash = () => {
                 </span>
               </>
             )}
+            {modelState.isInitialized && (
+              <>
+                <span className="divider">•</span>
+                <Brain style={{ width: '16px', height: '16px', color: '#7fa8c9' }} />
+                <span>ML Active</span>
+              </>
+            )}
           </div>
         </header>
       )}
@@ -446,7 +520,7 @@ const Dash = () => {
       {!flowLock && !inMeeting && (
         <div className="dashboard-layout">
           
-          {/* ENERGY CARD */}
+          {/* ENERGY CARD - Now ML-Powered */}
           <div className="bento-card energy-card">
             <div className="card-header">
               <div className="header-icon-wrapper">
@@ -454,7 +528,9 @@ const Dash = () => {
               </div>
               <div className="header-text">
                 <h3>Energy Flow</h3>
-                <span className="header-badge">Balanced</span>
+                <span className="header-badge">
+                  {mlLoading ? 'Syncing...' : modelState.isInitialized ? 'ML-Powered' : 'Baseline'}
+                </span>
               </div>
             </div>
             
@@ -479,7 +555,9 @@ const Dash = () => {
                 </svg>
                 <div className="energy-center">
                   <div className="energy-percent">{energy}%</div>
-                  <div className="energy-label">Calm Energy</div>
+                  <div className="energy-label">
+                    {mlLoading ? 'Loading...' : 'Velocity'}
+                  </div>
                 </div>
               </div>
 
@@ -487,8 +565,12 @@ const Dash = () => {
                 <div className="energy-stat-item">
                   <div className="stat-dot green"></div>
                   <div className="stat-info">
-                    <span className="stat-title">Peak Focus</span>
-                    <span className="stat-value">10 AM - 12 PM</span>
+                    <span className="stat-title">Peak Hours</span>
+                    <span className="stat-value">
+                      {modelState.peakHours && modelState.peakHours.length > 0
+                        ? `${modelState.peakHours[0]}-${modelState.peakHours[modelState.peakHours.length - 1]}`
+                        : '10-12 AM'}
+                    </span>
                   </div>
                 </div>
                 <div className="energy-stat-item">
@@ -501,15 +583,19 @@ const Dash = () => {
                 <div className="energy-stat-item">
                   <div className="stat-dot blue"></div>
                   <div className="stat-info">
-                    <span className="stat-title">Trend</span>
-                    <span className="stat-value">Stable ↑</span>
+                    <span className="stat-title">Baseline</span>
+                    <span className="stat-value">
+                      {modelState.baselineVelocity 
+                        ? `${Math.round(modelState.baselineVelocity)}%`
+                        : 'Learning...'}
+                    </span>
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* SUGGESTIONS CARD - Personalized by online learning model */}
+          {/* SUGGESTIONS CARD - Personalized by ML model */}
           <div className="bento-card suggestions-card">
             <div className="card-header">
               <div className="header-icon-wrapper">
@@ -517,41 +603,44 @@ const Dash = () => {
               </div>
               <div className="header-text">
                 <h3>Mindful Suggestions</h3>
-                <span className="header-badge">Personalized</span>
+                <span className="header-badge">
+                  {modelState.isInitialized ? 'Personalized' : `Learning (${modelState.dataPointsCollected}/50)`}
+                </span>
               </div>
             </div>
             <div className="suggestions-list">
-              {suggestionsLoading ? (
+              {mlLoading && displaySuggestions.length === 0 ? (
                 <div className="suggestion-loading">Loading suggestions…</div>
-              ) : suggestionsError ? (
-                <div className="suggestion-error">{suggestionsError}</div>
-              ) : mindfulSuggestions.length === 0 ? (
+              ) : mlError ? (
+                <div className="suggestion-error">{mlError}</div>
+              ) : displaySuggestions.length === 0 ? (
                 <div className="suggestion-item green">
                   <div className="suggestion-icon-wrapper">
                     <Feather className="suggestion-icon" />
                   </div>
                   <div className="suggestion-content">
                     <div className="suggestion-title">You're in good flow</div>
-                    <div className="suggestion-desc">No specific nudge right now. Keep going mindfully.</div>
+                    <div className="suggestion-desc">
+                      {modelState.isInitialized 
+                        ? 'No specific nudge right now. Keep going mindfully.'
+                        : `Model is learning your patterns (${modelState.dataPointsCollected}/50 tasks)`}
+                    </div>
                   </div>
                   <div className="suggestion-action">→</div>
                 </div>
               ) : (
-                mindfulSuggestions.map((s, i) => {
+                displaySuggestions.map((s, i) => {
                   const isBreak = s.type === 'TAKE_BREAK';
                   const isPeak = s.type === 'PEAK_HOUR';
                   const isLowEnergy = s.type === 'LOW_ENERGY_HOUR';
                   const Icon = isBreak ? Wind : isPeak ? Zap : Feather;
-                  const colorClass = isPeak ? 'green' : 'yellow';
+                  const colorClass = isPeak ? 'green' : isBreak ? 'yellow' : 'blue';
                   const title = isBreak ? 'Take a break' : isPeak ? 'Peak hour' : isLowEnergy ? 'Low energy hour' : s.type || 'Suggestion';
+                  
                   return (
                     <div
                       key={i}
                       className={`suggestion-item ${colorClass}`}
-                      onClick={() => setSelectedSuggestion(selectedSuggestion?.message === s.message ? null : s)}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => e.key === 'Enter' && setSelectedSuggestion(selectedSuggestion?.message === s.message ? null : s)}
                     >
                       <div className="suggestion-icon-wrapper">
                         <Icon className="suggestion-icon" />
@@ -559,8 +648,14 @@ const Dash = () => {
                       <div className="suggestion-content">
                         <div className="suggestion-title">{title}</div>
                         <div className="suggestion-desc">{s.message}</div>
-                        {selectedSuggestion?.message === s.message && (
-                          <div className="suggestion-reason">Why: based on your personal baseline (explanation coming soon)</div>
+                        {s.duration && (
+                          <div className="suggestion-duration" style={{ 
+                            fontSize: '12px', 
+                            marginTop: '4px', 
+                            opacity: 0.7 
+                          }}>
+                            Suggested: {s.duration} minutes
+                          </div>
                         )}
                       </div>
                       <div className="suggestion-action">→</div>
@@ -719,7 +814,7 @@ const Dash = () => {
                 <button 
                   className="add-task-btn" 
                   onClick={() => setShowAddTask(!showAddTask)}
-                  disabled={inMeeting}
+                  disabled={inMeeting}  
                 >
                   <Plus className="plus-icon" />
                   Add Task
@@ -904,6 +999,11 @@ const Dash = () => {
           <div className="privacy-content">
             <Shield size={12} />
             <span>Privacy-first • No keystroke tracking • Data stays with you</span>
+            {isPolling && (
+              <span style={{ marginLeft: '10px', opacity: 0.6 }}>
+                • ML updating every 10s
+              </span>
+            )}
           </div>
         </div>
       )}
