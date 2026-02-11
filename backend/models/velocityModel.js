@@ -1,9 +1,32 @@
 /**
  * Velocity Model (MongoDB/Mongoose)
- * Stores velocity readings and error events for persistent analytics
+ * Stores velocity readings, error events, and activity tracking for persistent analytics
+ * UPDATED: Added activity tracking schemas
  */
 
 const mongoose = require('mongoose');
+
+// ==========================================
+// ACTIVITY EVENT SCHEMA (NEW)
+// ==========================================
+const activityEventSchema = new mongoose.Schema({
+  type: {
+    type: String,
+    enum: ['click', 'keydown', 'mousemove', 'scroll', 'touchstart', 'idle', 'task_pause'],
+    required: true
+  },
+  clicks: { type: Number, default: 0 },
+  keystrokes: { type: Number, default: 0 },
+  mouseMoves: { type: Number, default: 0 },
+  scrolls: { type: Number, default: 0 },
+  idleDuration: { type: Number, default: 0 }, // in milliseconds
+  intensity: { type: Number, min: 0, max: 100 }, // activity intensity score
+  timestamp: { type: Date, default: Date.now }
+}, { _id: false });
+
+// ==========================================
+// EXISTING SCHEMAS
+// ==========================================
 
 // Velocity Reading Schema
 const velocityReadingSchema = new mongoose.Schema({
@@ -124,17 +147,70 @@ const sessionSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
+  },
+  // NEW: Activity tracking metrics
+  totalClicks: {
+    type: Number,
+    default: 0
+  },
+  totalKeystrokes: {
+    type: Number,
+    default: 0
+  },
+  totalIdleTime: {
+    type: Number,
+    default: 0
   }
 }, {
   timestamps: true
 });
 
-// Compound indexes for efficient queries
+// ==========================================
+// ACTIVITY DATA SCHEMA (NEW)
+// ==========================================
+const activityDataSchema = new mongoose.Schema({
+  userId: {
+    type: String,
+    required: true,
+    index: true,
+    unique: true
+  },
+  activityEvents: [activityEventSchema],
+  lastActivityTime: {
+    type: Date,
+    default: Date.now
+  },
+  sessionMetrics: {
+    totalClicks: { type: Number, default: 0 },
+    totalKeystrokes: { type: Number, default: 0 },
+    totalMouseMoves: { type: Number, default: 0 },
+    totalScrolls: { type: Number, default: 0 },
+    totalIdleTime: { type: Number, default: 0 }
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now
+  }
+}, {
+  timestamps: true
+});
+
+// ==========================================
+// INDEXES
+// ==========================================
 velocityReadingSchema.index({ userId: 1, timestamp: -1 });
 errorEventSchema.index({ userId: 1, timestamp: -1 });
 sessionSchema.index({ userId: 1, isActive: 1 });
+activityDataSchema.index({ userId: 1 });
+activityDataSchema.index({ 'activityEvents.timestamp': -1 });
 
-// Static methods for VelocityReading
+// ==========================================
+// STATIC METHODS - VelocityReading
+// ==========================================
 velocityReadingSchema.statics.getBaselineVelocity = async function(userId, windowMinutes = 30) {
   const windowStart = new Date(Date.now() - windowMinutes * 60 * 1000);
   
@@ -174,7 +250,9 @@ velocityReadingSchema.statics.getVelocityHistory = async function(userId, hoursB
   .lean();
 };
 
-// Static methods for ErrorEvent
+// ==========================================
+// STATIC METHODS - ErrorEvent
+// ==========================================
 errorEventSchema.statics.getCurrentErrorRate = async function(userId, windowMinutes = 5) {
   const windowStart = new Date(Date.now() - windowMinutes * 60 * 1000);
   
@@ -219,7 +297,9 @@ errorEventSchema.statics.getErrorsByType = async function(userId, hoursBack = 24
   ]);
 };
 
-// Static methods for Session
+// ==========================================
+// STATIC METHODS - Session
+// ==========================================
 sessionSchema.statics.getActiveSession = async function(userId) {
   return this.findOne({ userId, isActive: true });
 };
@@ -256,13 +336,98 @@ sessionSchema.statics.endSession = async function(userId) {
   );
 };
 
-// Create models
+// ==========================================
+// STATIC METHODS - ActivityData (NEW)
+// ==========================================
+activityDataSchema.statics.recordActivity = async function(userId, activityEvent) {
+  return this.findOneAndUpdate(
+    { userId },
+    {
+      $push: {
+        activityEvents: {
+          $each: [activityEvent],
+          $slice: -1000 // Keep only last 1000 events
+        }
+      },
+      $set: { 
+        lastActivityTime: activityEvent.timestamp || Date.now(),
+        updatedAt: Date.now()
+      },
+      $inc: {
+        'sessionMetrics.totalClicks': activityEvent.clicks || 0,
+        'sessionMetrics.totalKeystrokes': activityEvent.keystrokes || 0,
+        'sessionMetrics.totalMouseMoves': activityEvent.mouseMoves || 0,
+        'sessionMetrics.totalScrolls': activityEvent.scrolls || 0,
+        'sessionMetrics.totalIdleTime': activityEvent.idleDuration || 0
+      }
+    },
+    { upsert: true, new: true }
+  );
+};
+
+activityDataSchema.statics.getRecentActivity = async function(userId, limit = 100) {
+  const data = await this.findOne({ userId })
+    .select('activityEvents')
+    .lean();
+  
+  if (!data || !data.activityEvents) {
+    return [];
+  }
+  
+  return data.activityEvents
+    .slice(-limit)
+    .sort((a, b) => b.timestamp - a.timestamp);
+};
+
+activityDataSchema.statics.getActivityMetrics = async function(userId) {
+  const data = await this.findOne({ userId })
+    .select('sessionMetrics lastActivityTime')
+    .lean();
+  
+  return data || {
+    sessionMetrics: {
+      totalClicks: 0,
+      totalKeystrokes: 0,
+      totalMouseMoves: 0,
+      totalScrolls: 0,
+      totalIdleTime: 0
+    },
+    lastActivityTime: null
+  };
+};
+
+activityDataSchema.statics.resetSession = async function(userId) {
+  return this.findOneAndUpdate(
+    { userId },
+    {
+      $set: {
+        'sessionMetrics.totalClicks': 0,
+        'sessionMetrics.totalKeystrokes': 0,
+        'sessionMetrics.totalMouseMoves': 0,
+        'sessionMetrics.totalScrolls': 0,
+        'sessionMetrics.totalIdleTime': 0,
+        activityEvents: [],
+        updatedAt: Date.now()
+      }
+    },
+    { new: true }
+  );
+};
+
+// ==========================================
+// CREATE MODELS
+// ==========================================
 const VelocityReading = mongoose.model('VelocityReading', velocityReadingSchema);
 const ErrorEvent = mongoose.model('ErrorEvent', errorEventSchema);
 const Session = mongoose.model('Session', sessionSchema);
+const ActivityData = mongoose.model('ActivityData', activityDataSchema); // NEW
 
+// ==========================================
+// EXPORTS
+// ==========================================
 module.exports = {
   VelocityReading,
   ErrorEvent,
-  Session
+  Session,
+  ActivityData // NEW - Export the activity model
 };

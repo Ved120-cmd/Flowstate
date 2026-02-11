@@ -56,7 +56,7 @@ class OnlineLearningModel {
     
     // Training data buffer (for batch updates)
     this.trainingBuffer = [];
-    this.bufferSize = 50;  // Update model every 50 data points
+    this.bufferSize = 5;  // Update model every 50 data points
     
     // Model state
     this.isInitialized = false;
@@ -290,7 +290,12 @@ class OnlineLearningModel {
       this.personalizedWeights.beta * (1 - idleRatio) - 
       this.personalizedWeights.gamma * errorRate;
     
-    const normalizedVelocity = Math.max(0, Math.min(100, rawVelocity * 100));
+    const normalizedVelocity = Math.max(10, Math.min(100, rawVelocity * 100));
+
+    if (this.userProfile.baselineVelocity === null) {
+      this.userProfile.baselineVelocity = normalizedVelocity || 50;
+  }
+  
     
     return normalizedVelocity;
   }
@@ -344,6 +349,7 @@ class OnlineLearningModel {
         baselineVelocity: this.userProfile.baselineVelocity,
         optimalRange: this.personalizedThresholds.optimalVelocityRange
       },
+      
       suggestions: []
     };
     
@@ -378,63 +384,92 @@ class OnlineLearningModel {
         reason: 'historical_pattern'
       });
     }
+
+    if (!this.userProfile.baselineVelocity) {
+      recommendations.suggestions.push({
+        type: 'LEARNING_MODE',
+        priority: 'low',
+        message: 'Calibrating your productivity baseline...',
+        reason: 'initialization'
+      });
     
     return recommendations;
   }
 
   /**
-   * Get model state (for debugging/monitoring)
-   */
-  getModelState() {
-    return {
-      userId: this.userId,
-      isInitialized: this.isInitialized,
-      dataPointsCollected: this.dataPointsCollected,
-      lastUpdate: new Date(this.lastUpdate).toISOString(),
-      personalizedWeights: this.personalizedWeights,
-      personalizedThresholds: this.personalizedThresholds,
-      userProfile: this.userProfile,
-      trainingBufferSize: this.trainingBuffer.length
-    };
-  }
+ * Get model state (for debugging/monitoring)
+ */
+getModelState() {
+  return {
+    userId: this.userId,
+    isInitialized: this.isInitialized,
+    dataPointsCollected: this.dataPointsCollected,
+    lastUpdate: new Date(this.lastUpdate).toISOString(),
+    personalizedWeights: this.personalizedWeights,
+    personalizedThresholds: this.personalizedThresholds,
+    baselineVelocity: this.userProfile.baselineVelocity,
+    userProfile: this.userProfile,
+    trainingBufferSize: this.trainingBuffer.length
+  };
+}
 
-  /**
-   * Save model to database (to be implemented)
-   */
-  async saveModel() {
-    // This would save the model state to database
-    // For now, return the serializable state
-    return {
-      userId: this.userId,
-      personalizedWeights: this.personalizedWeights,
-      personalizedThresholds: this.personalizedThresholds,
-      userProfile: this.userProfile,
-      dataPointsCollected: this.dataPointsCollected,
-      lastUpdate: this.lastUpdate
-    };
-  }
 
-  /**
-   * Load model from database (Mongoose doc or plain object)
-   */
-  static async loadModel(userId, savedState) {
-    const model = new OnlineLearningModel(userId);
-    
-    if (savedState) {
-      // Handle Mongoose document: use plain object to avoid mutating doc
-      const state = savedState.toObject ? savedState.toObject() : savedState;
-      model.personalizedWeights = state.personalizedWeights || model.personalizedWeights;
-      model.personalizedThresholds = state.personalizedThresholds || model.personalizedThresholds;
-      model.userProfile = state.userProfile
-        ? JSON.parse(JSON.stringify({ ...model.userProfile, ...state.userProfile }))
-        : model.userProfile;
-      model.dataPointsCollected = state.dataPointsCollected ?? model.dataPointsCollected;
-      model.lastUpdate = state.lastUpdate ?? model.lastUpdate;
-      model.isInitialized = !!state.isInitialized;
+/**
+ * Save model to database
+ */
+async saveModel() {
+  return {
+    userId: this.userId,
+    personalizedWeights: this.personalizedWeights,
+    personalizedThresholds: this.personalizedThresholds,
+    userProfile: this.userProfile,
+    dataPointsCollected: this.dataPointsCollected,
+    lastUpdate: this.lastUpdate,
+    isInitialized: this.isInitialized   // ✅ FIXED
+  };
+}
+
+/**
+ * Load model from database (Mongoose doc or plain object)
+ */
+static async loadModel(userId, savedState) {
+  const model = new OnlineLearningModel(userId);
+
+  if (savedState) {
+    const state = savedState.toObject
+      ? savedState.toObject()
+      : savedState;
+
+    model.personalizedWeights =
+      state.personalizedWeights || model.personalizedWeights;
+
+    model.personalizedThresholds =
+      state.personalizedThresholds || model.personalizedThresholds;
+
+    if (state.userProfile) {
+      model.userProfile = {
+        ...model.userProfile,
+        ...state.userProfile,
+        interventionSuccess: {
+          ...model.userProfile.interventionSuccess,
+          ...(state.userProfile.interventionSuccess || {})
+        }
+      };
     }
-    
-    return model;
+
+    model.dataPointsCollected =
+      state.dataPointsCollected ?? model.dataPointsCollected;
+
+    model.lastUpdate = state.lastUpdate
+      ? new Date(state.lastUpdate).getTime()
+      : model.lastUpdate;
+
+    model.isInitialized = !!state.isInitialized;  // ✅ FIXED
   }
+
+  return model;
+}
+
 }
 
 module.exports = OnlineLearningModel;

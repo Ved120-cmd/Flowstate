@@ -60,15 +60,17 @@ mongoose
 /* =======================
    Import Routes
 ======================= */
+console.log('\n📦 Loading routes...\n');
+
 let authRoutes, taskRoutes, activityRoutes, sessionRoutes;
-let idleRoutes, meetingRoutes, energyRoutes, analyticsRoutes, velocityRoutes;
+let idleRoutes, meetingRoutes, energyRoutes, analyticsRoutes, mlVelocityRoutes;
 
 try {
   authRoutes = require("./routes/auth");
   console.log("✅ Auth routes loaded");
 } catch (err) {
   console.error("❌ Error loading auth routes:", err.message);
-  process.exit(1); // Auth routes are required
+  process.exit(1);
 }
 
 try {
@@ -120,32 +122,66 @@ try {
   console.warn("⚠️  Analytics routes not found (optional)");
 }
 
+// ✅ Load ML Velocity routes
 try {
-  velocityRoutes = require("./routes/mlvelocity");
-  console.log("✅ ML Velocity routes loaded (personalized suggestions)");
+  mlVelocityRoutes = require("./routes/mlvelocity");
+  console.log("🤖 ML Velocity routes loaded");
 } catch (err) {
-  try {
-    velocityRoutes = require("./routes/velocity");
-    console.log("✅ Velocity routes loaded");
-  } catch (err2) {
-    console.warn("⚠️  Velocity routes not found (optional)");
-  }
+  console.error("❌ Error loading ML velocity routes:", err.message);
+  console.error("   Stack:", err.stack);
 }
+
+console.log('\n📌 Registering routes...\n');
 
 /* =======================
    Register Routes
-   Auth routes are PUBLIC (no middleware)
-   Other routes should handle auth internally
 ======================= */
-if (authRoutes) app.use("/api/auth", authRoutes);
-if (taskRoutes) app.use("/api/tasks", taskRoutes);
-if (activityRoutes) app.use("/api/activity", activityRoutes);
-if (sessionRoutes) app.use("/api/session", sessionRoutes);
-if (idleRoutes) app.use("/api/idle", idleRoutes);
-if (meetingRoutes) app.use("/api/meeting", meetingRoutes);
-if (energyRoutes) app.use("/api/energy", energyRoutes);
-if (analyticsRoutes) app.use("/api/analytics", analyticsRoutes);
-if (velocityRoutes) app.use("/api", velocityRoutes);
+if (authRoutes) {
+  app.use("/api/auth", authRoutes);
+  console.log("✅ Mounted: /api/auth/*");
+}
+
+if (taskRoutes) {
+  app.use("/api/tasks", taskRoutes);
+  console.log("✅ Mounted: /api/tasks/*");
+}
+
+if (activityRoutes) {
+  app.use("/api/activity", activityRoutes);
+  console.log("✅ Mounted: /api/activity/* (legacy)");
+}
+
+if (sessionRoutes) {
+  app.use("/api/session", sessionRoutes);
+  console.log("✅ Mounted: /api/session/*");
+}
+
+if (idleRoutes) {
+  app.use("/api/idle", idleRoutes);
+  console.log("✅ Mounted: /api/idle/*");
+}
+
+if (meetingRoutes) {
+  app.use("/api/meeting", meetingRoutes);
+  console.log("✅ Mounted: /api/meeting/*");
+}
+
+if (energyRoutes) {
+  app.use("/api/energy", energyRoutes);
+  console.log("✅ Mounted: /api/energy/*");
+}
+
+if (analyticsRoutes) {
+  app.use("/api/analytics", analyticsRoutes);
+  console.log("✅ Mounted: /api/analytics/*");
+}
+
+// ✅ CRITICAL: Mount ML Velocity routes at /api
+if (mlVelocityRoutes) {
+  app.use("/api", mlVelocityRoutes);
+  console.log("🤖 Mounted: /api/activity/* (ML-powered)");
+  console.log("🤖 Mounted: /api/velocity/* (ML-powered)");
+}
 
 /* =======================
    Health Check Endpoints
@@ -163,6 +199,7 @@ app.get("/api", (req, res) => {
   res.json({
     message: "FlowState API",
     version: "1.0.0",
+    ml_enabled: !!mlVelocityRoutes,
     endpoints: {
       auth: "/api/auth",
       tasks: "/api/tasks",
@@ -192,9 +229,11 @@ app.use((err, req, res, next) => {
    404 Handler
 ======================= */
 app.use((req, res) => {
+  console.log('❌ 404 - Route not found:', req.method, req.path);
   res.status(404).json({
     message: "Endpoint not found",
     path: req.path,
+    method: req.method,
     availableEndpoints: "/api"
   });
 });
@@ -211,8 +250,13 @@ app.listen(PORT, () => {
   console.log(`   API: http://localhost:${PORT}/api`);
   console.log(`   Health: http://localhost:${PORT}/`);
   
-  if (velocityRoutes) {
-    console.log(`   Velocity: http://localhost:${PORT}/api/velocity/current`);
+  if (mlVelocityRoutes) {
+    console.log("\n🤖 ML-Powered Endpoints:");
+    console.log(`   POST http://localhost:${PORT}/api/activity`);
+    console.log(`   POST http://localhost:${PORT}/api/activity/task/start`);
+    console.log(`   POST http://localhost:${PORT}/api/activity/task/complete`);
+    console.log(`   GET  http://localhost:${PORT}/api/velocity/personalized`);
+    console.log(`   POST http://localhost:${PORT}/api/velocity/feedback`);
   }
   
   console.log("\n📝 Logs will appear below:\n");

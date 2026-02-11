@@ -98,7 +98,7 @@ const SignUp = () => {
       setOtp(['', '', '', '', '', '']);
       document.getElementById('otp-0')?.focus();
     }
-  };
+    };
 
   const handleOtpChange = (index, value) => {
     if (value.length > 1) value = value[0];
