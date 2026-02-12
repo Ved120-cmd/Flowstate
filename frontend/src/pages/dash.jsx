@@ -1,7 +1,7 @@
-// dash.jsx - Integrated with ML Model (Updates every 10 seconds)
-import React, { useState, useEffect } from 'react'; 
-import { 
-  AreaChart, Area, 
+// frontend/src/pages/Dash.jsx - Activity-Based Tracking (NO POLLING)
+import React, { useState, useEffect } from 'react';
+import {
+  AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 import { 
@@ -30,39 +30,34 @@ import {
   Shield,
   Users,
   Plus,
-  Activity
+  Activity,
+  MousePointer2
 } from 'lucide-react';
 import '../App.css';
 import CardNav from './CardNav';
-import { useMLVelocity } from '../hooks/useMLVelocity';
+import useActivityTracking from '../hooks/useActivityTracking';
 
-// Main Dash Component with ML Integration
+// Main Dash Component with Activity-Based ML Tracking
 const Dash = () => {
-  // ML Velocity Hook - Polls model every 10 seconds
+  // Activity-Based ML Tracking Hook (NO POLLING!)
   const {
     velocity: mlVelocity,
     suggestions: mlSuggestions,
     modelState,
+    isIdle,
+    activityMetrics,
     loading: mlLoading,
     error: mlError,
-    isPolling,
     recordTaskStart,
     recordTaskComplete,
     recordTaskPause,
-    recordFeedback
-  } = useMLVelocity({
-    pollingInterval: 10000, // 10 seconds
-    autoStart: true,
-    onSuggestion: (suggestions) => {
-      console.log('📬 New ML suggestions:', suggestions);
-      // Show toast for high-priority suggestions
-      if (suggestions.some(s => s.priority === 'high')) {
-        setShowToast(true);
-      }
-    },
-    onVelocityChange: (newVel, oldVel) => {
-      console.log(`📊 Velocity updated: ${oldVel?.toFixed(1)} → ${newVel.toFixed(1)}`);
-    }
+    recordFeedback,
+    refreshVelocity,
+    getActivityMetrics
+  } = useActivityTracking({
+    idleThreshold: 120000, // 2 minutes = idle
+    activityCheckInterval: 10000, // Check every 10 seconds
+    enabled: true
   });
 
   // State
@@ -78,13 +73,13 @@ const Dash = () => {
   const [displayName, setDisplayName] = useState('');
   const [dismissedSuggestions, setDismissedSuggestions] = useState(new Set());
   const [lastDismissTime, setLastDismissTime] = useState(null);
-  
+
   const [newTask, setNewTask] = useState({
     title: '',
     complexity: 'Medium',
     duration: ''
   });
-  
+
   const nudges = [
     "Breathe deeply. This moment is yours to cherish.",
     "Notice the space between tasks - that's where peace grows.",
@@ -96,38 +91,38 @@ const Dash = () => {
   ];
 
   const [tasks, setTasks] = useState([
-    { 
-      id: 1, 
-      title: "Refactor API Logic", 
-      complexity: "High", 
-      status: "In Progress", 
+    {
+      id: 1,
+      title: "Refactor API Logic",
+      complexity: "High",
+      status: "In Progress",
       duration: "2h",
       startTime: new Date(Date.now() - 3600000),
       isPaused: false
     },
-    { 
-      id: 2, 
-      title: "Update Documentation", 
-      complexity: "Low", 
-      status: "Todo", 
+    {
+      id: 2,
+      title: "Update Documentation",
+      complexity: "Low",
+      status: "Todo",
       duration: "45m",
       startTime: null,
       isPaused: false
     },
-    { 
-      id: 3, 
-      title: "Database Migration", 
-      complexity: "High", 
-      status: "Todo", 
+    {
+      id: 3,
+      title: "Database Migration",
+      complexity: "High",
+      status: "Todo",
       duration: "3h",
       startTime: null,
       isPaused: false
     },
-    { 
-      id: 4, 
-      title: "Weekly Sync", 
-      complexity: "Medium", 
-      status: "Todo", 
+    {
+      id: 4,
+      title: "Weekly Sync",
+      complexity: "Medium",
+      status: "Todo",
       duration: "1h",
       startTime: null,
       isPaused: false
@@ -148,6 +143,31 @@ const Dash = () => {
       setEnergy(Math.round(Math.min(100, Math.max(0, mlVelocity))));
     }
   }, [mlVelocity]);
+
+  // Show toast when new high-priority suggestions arrive
+  useEffect(() => {
+    if (mlSuggestions && mlSuggestions.length > 0) {
+      // Find ANY high or medium priority suggestion
+      const importantSuggestion = mlSuggestions.find(s =>
+        s.priority === 'high' || s.priority === 'medium'
+      );
+
+      if (importantSuggestion) {
+        // Check if enough time passed since last dismiss
+        const timeSinceLastDismiss = lastDismissTime
+          ? Date.now() - lastDismissTime
+          : Infinity;
+
+        // Show toast more frequently - every 2 minutes instead of 5
+        const shouldShow = timeSinceLastDismiss > 2 * 60 * 1000; // 2 minutes
+
+        if (shouldShow && !dismissedSuggestions.has(importantSuggestion.type)) {
+          console.log('🎉 Showing toast for:', importantSuggestion.type);
+          setShowToast(true);
+        }
+      }
+    }
+  }, [mlSuggestions, lastDismissTime, dismissedSuggestions]);
 
   // Load user preferences and display name on component mount
   useEffect(() => {
@@ -171,7 +191,7 @@ const Dash = () => {
         const user = JSON.parse(userJson);
         if (user?.displayName?.trim()) setDisplayName(user.displayName.trim());
       }
-    } catch (_) {}
+    } catch (_) { }
   }, []);
 
   // Update time every minute
@@ -200,7 +220,7 @@ const Dash = () => {
     } else {
       setFlowLockTimer(0);
     }
-    
+
     return () => {
       if (interval) clearInterval(interval);
     };
@@ -209,29 +229,42 @@ const Dash = () => {
   const handleAcceptSuggestion = async () => {
     setShowToast(false);
     setLastDismissTime(Date.now());
-    
+
     if (mlSuggestions?.length > 0) {
-      setDismissedSuggestions(prev => new Set([...prev, mlSuggestions[0].type]));
-      await recordFeedback(mlSuggestions[0].type, true);
-      
+      const suggestionType = mlSuggestions[0].type;
+      setDismissedSuggestions(prev => new Set([...prev, suggestionType]));
+      await recordFeedback(suggestionType, true);
+
       // Clear after 5 minutes
       setTimeout(() => {
         setDismissedSuggestions(prev => {
           const newSet = new Set(prev);
-          newSet.delete(mlSuggestions[0].type);
+          newSet.delete(suggestionType);
           return newSet;
         });
       }, 5 * 60 * 1000);
     }
-    
+
     setEnergy(prev => Math.min(prev + 5, 100));
   };
 
   const handleDismiss = async () => {
     setShowToast(false);
-    // Record rejection to ML model
-    if (mlSuggestions && mlSuggestions.length > 0) {
-      await recordFeedback(mlSuggestions[0].type, false);
+    setLastDismissTime(Date.now());
+
+    if (mlSuggestions?.length > 0) {
+      const suggestionType = mlSuggestions[0].type;
+      setDismissedSuggestions(prev => new Set([...prev, suggestionType]));
+      await recordFeedback(suggestionType, false);
+
+      // Clear after 5 minutes
+      setTimeout(() => {
+        setDismissedSuggestions(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(suggestionType);
+          return newSet;
+        });
+      }, 5 * 60 * 1000);
     }
   };
 
@@ -275,10 +308,10 @@ const Dash = () => {
 
   const handleStartTask = async (taskId) => {
     if (inMeeting) return;
-    
+
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
-    
+
     setTasks(tasks.map(t => {
       if (t.id === taskId && t.status === 'Todo') {
         return { ...t, status: 'In Progress', startTime: new Date(), isPaused: false };
@@ -288,11 +321,12 @@ const Dash = () => {
 
     // Record task start in ML model
     await recordTaskStart(taskId, task.complexity.toLowerCase());
+    console.log('▶️  Task started - ML model notified');
   };
 
   const handlePauseTask = async (taskId) => {
     if (inMeeting) return;
-    
+
     setTasks(tasks.map(task => {
       if (task.id === taskId && task.status === 'In Progress') {
         return { ...task, isPaused: !task.isPaused };
@@ -302,14 +336,15 @@ const Dash = () => {
 
     // Record pause in ML model
     await recordTaskPause(taskId);
+    console.log('⏸️  Task paused - ML model notified');
   };
 
   const handleCompleteTask = async (taskId) => {
     if (inMeeting) return;
-    
+
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
-    
+
     setTasks(tasks.map(t => {
       if (t.id === taskId) {
         return { ...t, status: 'Completed' };
@@ -319,7 +354,8 @@ const Dash = () => {
 
     // Record task completion in ML model (this trains the model!)
     await recordTaskComplete(taskId, task.complexity.toLowerCase());
-    
+    console.log('✅ Task completed - ML model trained!');
+
     setEnergy(prev => Math.min(prev + 3, 100));
   };
 
@@ -354,15 +390,22 @@ const Dash = () => {
   // Use ML suggestions if available
   const displaySuggestions = mlSuggestions && mlSuggestions.length > 0 ? mlSuggestions : [];
 
+  // Get activity status text
+  const getActivityStatus = () => {
+    if (isIdle) return 'Idle';
+    if (currentTask) return 'Working';
+    return 'Active';
+  };
+
   return (
     <div className={`app-container ${flowLock ? 'flow-lock-active' : ''} ${inMeeting ? 'in-meeting-mode' : ''}`}>
-      {/* ML MODEL STATUS INDICATOR (Dev Mode Only) */}
+      {/* ACTIVITY TRACKER STATUS (Dev Mode Only) */}
       {process.env.NODE_ENV === 'development' && (
         <div style={{
           position: 'fixed',
           bottom: '10px',
           right: '10px',
-          background: modelState.isInitialized ? '#88c9a1' : '#e6b89c',
+          background: isIdle ? '#e6b89c' : modelState.isInitialized ? '#88c9a1' : '#b3a396',
           color: 'white',
           padding: '8px 12px',
           borderRadius: '8px',
@@ -373,13 +416,44 @@ const Dash = () => {
           gap: '6px',
           boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
         }}>
-          <Activity size={14} className={isPolling ? 'pulse' : ''} />
+          <MousePointer2 size={14} className={!isIdle ? 'pulse' : ''} />
           <div>
             <div style={{ fontWeight: 600 }}>
-              ML: {modelState.isInitialized ? 'Active' : 'Learning'}
+              {getActivityStatus()} • ML: {modelState.isInitialized ? 'Active' : 'Learning'}
             </div>
             <div style={{ fontSize: '9px', opacity: 0.8 }}>
               {modelState.dataPointsCollected}/50 • Vel: {mlVelocity?.toFixed(0) || '—'}
+            </div>
+            <div style={{ fontSize: '9px', opacity: 0.6 }}>
+              Clicks: {activityMetrics.clicks} • Keys: {activityMetrics.keystrokes}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* IDLE WARNING */}
+      {isIdle && !flowLock && !inMeeting && (
+        <div style={{
+          position: 'fixed',
+          top: '80px',
+          right: '20px',
+          background: '#e6b89c',
+          color: 'white',
+          padding: '12px 16px',
+          borderRadius: '12px',
+          fontSize: '13px',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          animation: 'slideIn 0.3s ease-out'
+        }}>
+          <Clock size={18} />
+          <div>
+            <div style={{ fontWeight: 600 }}>Idle Detected</div>
+            <div style={{ fontSize: '11px', opacity: 0.9 }}>
+              No activity for 2+ minutes
             </div>
           </div>
         </div>
@@ -401,7 +475,7 @@ const Dash = () => {
         </div>
       )}
 
-      {/* TOAST NOTIFICATION - Now using ML suggestions */}
+      {/* TOAST NOTIFICATION */}
       {showToast && !flowLock && !inMeeting && displaySuggestions.length > 0 && (
         <div className="toast-notification">
           <div className="toast-content">
@@ -412,9 +486,9 @@ const Dash = () => {
             <div className="toast-text">
               <div className="toast-label">
                 <Sparkles className="sparkle-icon" />
-                {displaySuggestions[0].type === 'TAKE_BREAK' ? 'Break Suggestion' : 
-                 displaySuggestions[0].type === 'PEAK_HOUR' ? 'Peak Hour Alert' : 
-                 'Mindful Nudge'}
+                {displaySuggestions[0].type === 'TAKE_BREAK' ? 'Break Suggestion' :
+                  displaySuggestions[0].type === 'PEAK_HOUR' ? 'Peak Hour Alert' :
+                    'Mindful Nudge'}
               </div>
               <div className="toast-message">
                 {displaySuggestions[0].message}
@@ -450,10 +524,10 @@ const Dash = () => {
               {currentTask ? currentTask.title : "No active task selected"}
             </div>
             {mlVelocity !== null && (
-              <div className="flow-lock-velocity" style={{ 
-                marginTop: '12px', 
-                fontSize: '14px', 
-                opacity: 0.8 
+              <div className="flow-lock-velocity" style={{
+                marginTop: '12px',
+                fontSize: '14px',
+                opacity: 0.8
               }}>
                 Current Velocity: {Math.round(mlVelocity)}%
               </div>
@@ -461,7 +535,7 @@ const Dash = () => {
             <div className="flow-lock-affirmation">
               "Calm focus yields the best results"
             </div>
-            <button 
+            <button
               className="flow-lock-exit-btn"
               onClick={toggleFlowLock}
             >
@@ -482,12 +556,12 @@ const Dash = () => {
                 {nudges[nudgeIndex]}
               </div>
             </div>
-            
+
             <div className="card-nav-position-wrapper">
               <CardNav />
             </div>
           </div>
-          
+
           <div className="header-meta">
             <TimeIcon style={{ width: '16px', height: '16px', color: timeOfDay.color }} />
             <span>Good {timeOfDay.text}</span>
@@ -512,6 +586,9 @@ const Dash = () => {
                 <span>ML Active</span>
               </>
             )}
+            <span className="divider">•</span>
+            <Activity style={{ width: '16px', height: '16px', color: isIdle ? '#e6b89c' : '#88c9a1' }} />
+            <span style={{ color: isIdle ? '#e6b89c' : '#88c9a1' }}>{getActivityStatus()}</span>
           </div>
         </header>
       )}
@@ -519,8 +596,8 @@ const Dash = () => {
       {/* MAIN DASHBOARD LAYOUT */}
       {!flowLock && !inMeeting && (
         <div className="dashboard-layout">
-          
-          {/* ENERGY CARD - Now ML-Powered */}
+
+          {/* ENERGY CARD - Activity-Based */}
           <div className="bento-card energy-card">
             <div className="card-header">
               <div className="header-icon-wrapper">
@@ -529,34 +606,35 @@ const Dash = () => {
               <div className="header-text">
                 <h3>Energy Flow</h3>
                 <span className="header-badge">
-                  {mlLoading ? 'Syncing...' : modelState.isInitialized ? 'ML-Powered' : 'Baseline'}
+                  {mlLoading ? 'Syncing...' : modelState.isInitialized ? 'Activity-Tracked' : 'Baseline'}
                 </span>
               </div>
             </div>
-            
+
             <div className="energy-main">
               <div className="energy-circle-compact">
                 <svg className="energy-svg" viewBox="0 0 140 140">
                   <defs>
                     <linearGradient id="energyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#88c9a1" />
-                      <stop offset="100%" stopColor="#a8d4b5" />
+                      <stop offset="0%" stopColor={isIdle ? "#e6b89c" : "#88c9a1"} />
+                      <stop offset="100%" stopColor={isIdle ? "#d4a48a" : "#a8d4b5"} />
                     </linearGradient>
                   </defs>
-                  <circle 
+                  <circle
                     className="circle-bg"
                     cx="70" cy="70" r="60"
                   />
-                  <circle 
+                  <circle
                     className="circle-fill"
                     cx="70" cy="70" r="60"
                     strokeDasharray={`${energy * 3.77}, 376.99`}
+                    style={{ opacity: isIdle ? 0.6 : 1 }}
                   />
                 </svg>
                 <div className="energy-center">
                   <div className="energy-percent">{energy}%</div>
                   <div className="energy-label">
-                    {mlLoading ? 'Loading...' : 'Velocity'}
+                    {mlLoading ? 'Loading...' : isIdle ? 'Idle' : 'Velocity'}
                   </div>
                 </div>
               </div>
@@ -574,10 +652,10 @@ const Dash = () => {
                   </div>
                 </div>
                 <div className="energy-stat-item">
-                  <div className="stat-dot yellow"></div>
+                  <div className={`stat-dot ${isIdle ? 'red' : 'yellow'}`}></div>
                   <div className="stat-info">
                     <span className="stat-title">Current</span>
-                    <span className="stat-value">Steady Flow</span>
+                    <span className="stat-value">{isIdle ? 'Idle' : 'Steady Flow'}</span>
                   </div>
                 </div>
                 <div className="energy-stat-item">
@@ -585,7 +663,7 @@ const Dash = () => {
                   <div className="stat-info">
                     <span className="stat-title">Baseline</span>
                     <span className="stat-value">
-                      {modelState.baselineVelocity 
+                      {modelState.baselineVelocity
                         ? `${Math.round(modelState.baselineVelocity)}%`
                         : 'Learning...'}
                     </span>
@@ -595,6 +673,7 @@ const Dash = () => {
             </div>
           </div>
 
+          {/* SUGGESTIONS CARD - Personalized by ML model */}
           {/* SUGGESTIONS CARD - Personalized by ML model */}
           <div className="bento-card suggestions-card">
             <div className="card-header">
@@ -619,24 +698,47 @@ const Dash = () => {
                     <Feather className="suggestion-icon" />
                   </div>
                   <div className="suggestion-content">
-                    <div className="suggestion-title">You're in good flow</div>
+                    <div className="suggestion-title">
+                      {isIdle ? 'Take a moment' : 'You\'re in good flow'}
+                    </div>
                     <div className="suggestion-desc">
-                      {modelState.isInitialized 
-                        ? 'No specific nudge right now. Keep going mindfully.'
-                        : `Model is learning your patterns (${modelState.dataPointsCollected}/50 tasks)`}
+                      {isIdle
+                        ? 'No activity detected. Start a task when you\'re ready.'
+                        : modelState.isInitialized
+                          ? 'No specific nudge right now. Keep going mindfully.'
+                          : `Model is learning your patterns (${modelState.dataPointsCollected}/50 tasks)`}
                     </div>
                   </div>
                   <div className="suggestion-action">→</div>
                 </div>
               ) : (
                 displaySuggestions.map((s, i) => {
-                  const isBreak = s.type === 'TAKE_BREAK';
-                  const isPeak = s.type === 'PEAK_HOUR';
-                  const isLowEnergy = s.type === 'LOW_ENERGY_HOUR';
-                  const Icon = isBreak ? Wind : isPeak ? Zap : Feather;
-                  const colorClass = isPeak ? 'green' : isBreak ? 'yellow' : 'blue';
-                  const title = isBreak ? 'Take a break' : isPeak ? 'Peak hour' : isLowEnergy ? 'Low energy hour' : s.type || 'Suggestion';
-                  
+                  // Determine suggestion type and styling
+                  const isBreak = s.type === 'TAKE_BREAK' || s.type === 'LOW_ENERGY_HOUR';
+                  const isPeak = s.type === 'PEAK_HOUR' || s.type === 'MORNING_BOOST';
+                  const isIdle = s.type === 'IDLE_WARNING';
+                  const isLate = s.type === 'LATE_WORK';
+                  const isMaintain = s.type === 'MAINTAIN_ENERGY';
+
+                  // Select icon based on type
+                  let Icon = Feather;
+                  if (isBreak) Icon = Wind;
+                  else if (isPeak) Icon = Zap;
+                  else if (isIdle) Icon = Clock;
+                  else if (isLate) Icon = Moon;
+                  else if (isMaintain) Icon = CheckCircle2;
+
+                  // Select color class
+                  let colorClass = 'blue';
+                  if (isBreak) colorClass = 'yellow';
+                  else if (isPeak) colorClass = 'green';
+                  else if (isIdle) colorClass = 'red';
+
+                  // Format title
+                  const title = s.type
+                    ? s.type.toLowerCase().split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+                    : 'Suggestion';
+
                   return (
                     <div
                       key={i}
@@ -649,10 +751,10 @@ const Dash = () => {
                         <div className="suggestion-title">{title}</div>
                         <div className="suggestion-desc">{s.message}</div>
                         {s.duration && (
-                          <div className="suggestion-duration" style={{ 
-                            fontSize: '12px', 
-                            marginTop: '4px', 
-                            opacity: 0.7 
+                          <div className="suggestion-duration" style={{
+                            fontSize: '12px',
+                            marginTop: '4px',
+                            opacity: 0.7
                           }}>
                             Suggested: {s.duration} minutes
                           </div>
@@ -674,14 +776,16 @@ const Dash = () => {
               </div>
               <div className="header-text">
                 <h3>Current Task</h3>
-                <span className="header-badge">{currentTask ? 'Active' : 'Idle'}</span>
+                <span className="header-badge">{currentTask ? 'Active' : isIdle ? 'Idle' : 'Ready'}</span>
               </div>
             </div>
 
             {!currentTask ? (
               <div className="no-task-state">
                 <Layout className="no-task-icon" />
-                <div className="no-task-text">No task in progress</div>
+                <div className="no-task-text">
+                  {isIdle ? 'Idle - Start a task to begin tracking' : 'No task in progress'}
+                </div>
               </div>
             ) : (
               <div className="task-active-state">
@@ -697,21 +801,23 @@ const Dash = () => {
                     </span>
                   </div>
                 </div>
-                
+
                 <div className="status-indicator">
-                  <div className="status-dot"></div>
-                  {currentTask.isPaused ? 'Paused' : 'In Progress'}
+                  <div className="status-dot" style={{
+                    backgroundColor: isIdle ? '#e6b89c' : currentTask.isPaused ? '#f4a261' : '#88c9a1'
+                  }}></div>
+                  {isIdle ? 'Idle' : currentTask.isPaused ? 'Paused' : 'In Progress'}
                 </div>
 
                 <div className="task-actions-row">
-                  <button 
-                    className="task-btn pause" 
+                  <button
+                    className="task-btn pause"
                     onClick={() => handlePauseTask(currentTask.id)}
                   >
                     {currentTask.isPaused ? <Play size={14} /> : <Pause size={14} />}
                     {currentTask.isPaused ? 'Resume' : 'Pause'}
                   </button>
-                  <button 
+                  <button
                     className="task-btn complete"
                     onClick={() => handleCompleteTask(currentTask.id)}
                   >
@@ -739,27 +845,27 @@ const Dash = () => {
                 <AreaChart data={focusData}>
                   <defs>
                     <linearGradient id="colorFocus" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#7fa8c9" stopOpacity={0.2}/>
-                      <stop offset="95%" stopColor="#7fa8c9" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="#7fa8c9" stopOpacity={0.2} />
+                      <stop offset="95%" stopColor="#7fa8c9" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(140, 152, 164, 0.1)" vertical={false} />
-                  <XAxis 
-                    dataKey="time" 
-                    stroke="#a8b6bf" 
+                  <XAxis
+                    dataKey="time"
+                    stroke="#a8b6bf"
                     fontSize={11}
                     tickLine={false}
                     axisLine={false}
                   />
-                  <YAxis 
-                    stroke="#a8b6bf" 
+                  <YAxis
+                    stroke="#a8b6bf"
                     fontSize={11}
                     tickLine={false}
                     axisLine={false}
                   />
-                  <Tooltip 
-                    contentStyle={{ 
-                      borderRadius: '10px', 
+                  <Tooltip
+                    contentStyle={{
+                      borderRadius: '10px',
                       border: '1px solid #e8e4dd',
                       backgroundColor: '#ffffff',
                       boxShadow: '0 8px 20px rgba(140, 152, 164, 0.1)',
@@ -767,12 +873,12 @@ const Dash = () => {
                     }}
                     labelStyle={{ color: '#3c3c3c', fontWeight: 500 }}
                   />
-                  <Area 
-                    type="monotone" 
-                    dataKey="focus" 
-                    stroke="#7fa8c9" 
-                    fill="url(#colorFocus)" 
-                    strokeWidth={2} 
+                  <Area
+                    type="monotone"
+                    dataKey="focus"
+                    stroke="#7fa8c9"
+                    fill="url(#colorFocus)"
+                    strokeWidth={2}
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -795,7 +901,7 @@ const Dash = () => {
               </div>
               <div className="header-actions">
                 {showMeetingButton && (
-                  <button 
+                  <button
                     className={`meeting-mode-btn ${inMeeting ? 'active' : ''}`}
                     onClick={toggleMeetingMode}
                   >
@@ -803,7 +909,7 @@ const Dash = () => {
                     <span>{inMeeting ? 'In Meeting' : 'Start Meeting'}</span>
                   </button>
                 )}
-                <button 
+                <button
                   className={`flow-lock-btn ${flowLock ? 'active' : ''}`}
                   onClick={toggleFlowLock}
                   disabled={inMeeting}
@@ -811,10 +917,10 @@ const Dash = () => {
                   <Lock size={14} />
                   <span>Flow Lock</span>
                 </button>
-                <button 
-                  className="add-task-btn" 
+                <button
+                  className="add-task-btn"
                   onClick={() => setShowAddTask(!showAddTask)}
-                  disabled={inMeeting}  
+                  disabled={inMeeting}
                 >
                   <Plus className="plus-icon" />
                   Add Task
@@ -829,13 +935,13 @@ const Dash = () => {
                   type="text"
                   placeholder="Task name..."
                   value={newTask.title}
-                  onChange={(e) => setNewTask({...newTask, title: e.target.value})}
+                  onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
                   className="task-input"
                 />
                 <div className="form-row">
                   <select
                     value={newTask.complexity}
-                    onChange={(e) => setNewTask({...newTask, complexity: e.target.value})}
+                    onChange={(e) => setNewTask({ ...newTask, complexity: e.target.value })}
                     className="task-select"
                   >
                     <option value="Low">Low</option>
@@ -846,7 +952,7 @@ const Dash = () => {
                     type="text"
                     placeholder="Duration (e.g., 2h)"
                     value={newTask.duration}
-                    onChange={(e) => setNewTask({...newTask, duration: e.target.value})}
+                    onChange={(e) => setNewTask({ ...newTask, duration: e.target.value })}
                     className="task-input-small"
                   />
                 </div>
@@ -983,7 +1089,7 @@ const Dash = () => {
             <div className="meeting-affirmation">
               "Collaboration fuels innovation"
             </div>
-            <button 
+            <button
               className="meeting-exit-btn-large"
               onClick={toggleMeetingMode}
             >
@@ -998,10 +1104,10 @@ const Dash = () => {
         <div className="privacy-footer">
           <div className="privacy-content">
             <Shield size={12} />
-            <span>Privacy-first • No keystroke tracking • Data stays with you</span>
-            {isPolling && (
+            <span>Privacy-first • Activity-based tracking • Data stays with you</span>
+            {!isIdle && (
               <span style={{ marginLeft: '10px', opacity: 0.6 }}>
-                • ML updating every 10s
+                • {activityMetrics.clicks} clicks • {activityMetrics.keystrokes} keys
               </span>
             )}
           </div>
