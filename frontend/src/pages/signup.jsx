@@ -64,63 +64,65 @@ const SignUp = () => {
     }
   };
 
-  const handleOtpSubmit = async () => {
-    const otpCode = otp.join('');
-    
-    if (otpCode.length !== 6) {
-      setError('Please enter the complete 6-digit code');
-      return;
-    }
+ const handleOtpSubmit = async (otpArray = null) => {
+  const otpCode = otpArray ? otpArray.join('') : otp.join('');
+  
+  if (otpCode.length !== 6) {
+    setError('Please enter the complete 6-digit code');
+    return;
+  }
 
-    setIsLoading(true);
-    setError('');
+  setIsLoading(true);
 
-    try {
-      // Call backend to verify OTP
-      const response = await authAPI.verifyOTP(email, otpCode, displayName.trim());
-      console.log('OTP Verification Response:', response.data);
-      
-      // Store token and user data
-      localStorage.setItem('token', response.data.token);
-      localStorage.setItem('user', JSON.stringify(response.data.user));
-      localStorage.setItem('displayName', displayName);
-      
-      setIsLoading(false);
-      
-      // Navigate to questionnaire
-      navigate('/questionnaire');
-    } catch (err) {
-      setIsLoading(false);
-      setError(err.response?.data?.message || 'Invalid OTP. Please try again.');
-      console.error('OTP Verification Error:', err);
-      
-      // Clear OTP inputs on error
-      setOtp(['', '', '', '', '', '']);
-      document.getElementById('otp-0')?.focus();
-    }
-    };
+  try {
+    // Call backend to verify OTP
+    const response = await authAPI.verifyOTP(email, otpCode, displayName.trim());
+    console.log('OTP Verification Response:', response.data);
+    
+    // Store token and user data
+    localStorage.setItem('token', response.data.token);
+    localStorage.setItem('user', JSON.stringify(response.data.user));
+    localStorage.setItem('displayName', displayName);
+    
+    setIsLoading(false);
+    
+    // Navigate to questionnaire
+    navigate('/questionnaire');
+  } catch (err) {
+    setIsLoading(false);
+    setError(err.response?.data?.message || 'Invalid OTP. Please try again.');
+    console.error('OTP Verification Error:', err);
+    
+    // Clear OTP inputs on error
+    setOtp(['', '', '', '', '', '']);
+    document.getElementById('otp-0')?.focus();
+  }
+};
 
-  const handleOtpChange = (index, value) => {
-    if (value.length > 1) value = value[0];
-    if (!/^\d*$/.test(value)) return;
-    
-    const newOtp = [...otp];
-    newOtp[index] = value;
-    setOtp(newOtp);
-    
-    if (value && index < 5) {
-      const nextInput = document.getElementById(`otp-${index + 1}`);
-      if (nextInput) nextInput.focus();
-    }
-    
-    // Auto-submit when all digits are entered
-    if (newOtp.every(digit => digit !== '') && newOtp.length === 6) {
-      // Small delay to allow the last digit to render
-      setTimeout(() => {
-        handleOtpSubmit();
-      }, 100);
-    }
-  };
+const handleOtpChange = (index, value) => {
+  if (value.length > 1) value = value[0];
+  if (!/^\d*$/.test(value)) return;
+  
+  const newOtp = [...otp];
+  newOtp[index] = value;
+  setOtp(newOtp);
+  
+  // Clear error immediately when user types
+  setError('');
+  
+  if (value && index < 5) {
+    const nextInput = document.getElementById(`otp-${index + 1}`);
+    if (nextInput) nextInput.focus();
+  }
+  
+  // Auto-submit when all digits are entered
+  if (newOtp.every(digit => digit !== '') && newOtp.length === 6) {
+    // Pass the new OTP array directly to avoid state delay
+    setTimeout(() => {
+      handleOtpSubmit(newOtp);
+    }, 100);
+  }
+};
 
   const handleOtpKeyDown = (index, e) => {
     if (e.key === 'Backspace' && !otp[index] && index > 0) {
