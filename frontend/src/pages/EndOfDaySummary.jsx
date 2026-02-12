@@ -6,7 +6,7 @@ const EndOfDaySummary = () => {
   const navigate = useNavigate();
   const [selectedFeeling, setSelectedFeeling] = useState(null);
   const [showFeedback, setShowFeedback] = useState(false);
-  const [hasSubmitted, setHasSubmitted] = useState(false); // New state to track if user has submitted for the day
+  const [hasSubmitted, setHasSubmitted] = useState(false);
   const [tooltipVisible, setTooltipVisible] = useState(null);
 
   // Check localStorage for existing submission
@@ -25,7 +25,6 @@ const EndOfDaySummary = () => {
   }, []);
 
   const selectFeeling = (feeling) => {
-    // If already submitted for today, don't allow changes
     if (hasSubmitted) {
       return;
     }
@@ -34,15 +33,11 @@ const EndOfDaySummary = () => {
     setShowFeedback(true);
     setHasSubmitted(true);
     
-    // Store in localStorage with today's date
     const today = new Date().toDateString();
     localStorage.setItem('eod_submission', JSON.stringify({
       date: today,
       feeling: feeling
     }));
-    
-    // Don't auto-hide the thank you message - it stays permanently
-    // The setTimeout has been removed
   };
 
   const handleDone = () => {
@@ -168,6 +163,7 @@ const EndOfDaySummary = () => {
             className="energy-story-container"
             onMouseEnter={() => handleMouseEnter('energy-story')}
             onMouseLeave={handleMouseLeave}
+            style={{ position: 'relative' }}
           >
             <div className="energy-mini">
               <div>
@@ -179,29 +175,61 @@ const EndOfDaySummary = () => {
               </svg>
               <div className="info-icon-small">i</div>
             </div>
-            <div className={`tooltip tooltip-energy ${tooltipVisible === 'energy-story' ? 'visible' : ''}`}>
-              <div className="tooltip-header">
-                <svg className="tooltip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21.64,13a1,1,0,0,0-1.05-.14,8.05,8.05,0,0,1-3.37.73A8.15,8.15,0,0,1,9.08,5.49a8.59,8.59,0,0,1,.25-2A1,1,0,0,0,8,2.36,10.14,10.14,0,1,0,22,14.05,1,1,0,0,0,21.64,13Z" />
-                </svg>
-                <strong>Energy Analysis</strong>
+            
+            {/* Energy Story Tooltip - FIXED: Positioned absolutely to the left */}
+            {tooltipVisible === 'energy-story' && (
+              <div style={{
+                position: 'absolute',
+                right: '100%',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                marginRight: '12px',
+                width: '280px',
+                backgroundColor: 'white',
+                borderRadius: '12px',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                padding: '16px',
+                border: '1px solid #e8e4dd',
+                zIndex: 1000
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21.64,13a1,1,0,0,0-1.05-.14,8.05,8.05,0,0,1-3.37.73A8.15,8.15,0,0,1,9.08,5.49a8.59,8.59,0,0,1,.25-2A1,1,0,0,0,8,2.36,10.14,10.14,0,1,0,22,14.05,1,1,0,0,0,21.64,13Z" />
+                  </svg>
+                  <strong style={{ fontSize: '14px' }}>Energy Analysis</strong>
+                </div>
+                <p style={{ fontSize: '13px', marginBottom: '12px', color: '#3c3c3c' }}>
+                  Your energy stayed stable through the afternoon, with a gentle dip after 4 PM.
+                </p>
+                <div style={{ fontSize: '12px' }}>
+                  <div style={{ display: 'flex', marginBottom: '6px' }}>
+                    <span style={{ width: '90px', color: '#8c98a4' }}>Pattern:</span>
+                    <span style={{ fontWeight: 500 }}>Stable focus</span>
+                  </div>
+                  <div style={{ display: 'flex', marginBottom: '6px' }}>
+                    <span style={{ width: '90px', color: '#8c98a4' }}>Peak focus:</span>
+                    <span style={{ fontWeight: 500 }}>10 AM - 12 PM</span>
+                  </div>
+                  <div style={{ display: 'flex' }}>
+                    <span style={{ width: '90px', color: '#8c98a4' }}>Lowest energy:</span>
+                    <span style={{ fontWeight: 500 }}>4 PM - 5 PM</span>
+                  </div>
+                </div>
+                {/* Tooltip arrow */}
+                <div style={{
+                  position: 'absolute',
+                  right: '-6px',
+                  top: '50%',
+                  transform: 'translateY(-50%) rotate(45deg)',
+                  width: '12px',
+                  height: '12px',
+                  backgroundColor: 'white',
+                  borderRight: '1px solid #e8e4dd',
+                  borderTop: '1px solid #e8e4dd',
+                  zIndex: 1001
+                }} />
               </div>
-              <p>Your energy stayed stable through the afternoon, with a gentle dip after 4 PM.</p>
-              <div className="tooltip-details">
-                <div className="tooltip-row">
-                  <span className="tooltip-label">Pattern:</span>
-                  <span className="tooltip-value">Stable focus</span>
-                </div>
-                <div className="tooltip-row">
-                  <span className="tooltip-label">Peak focus:</span>
-                  <span className="tooltip-value">10 AM - 12 PM</span>
-                </div>
-                <div className="tooltip-row">
-                  <span className="tooltip-label">Lowest energy:</span>
-                  <span className="tooltip-value">4 PM - 5 PM</span>
-                </div>
-              </div>
-            </div>
+            )}
           </div>
           
           <div className="time-items">
@@ -310,14 +338,14 @@ const EndOfDaySummary = () => {
           <p className="pattern-description">Your energy rhythm matches previous productive days.</p>
         </div>
 
-        {/* REFLECTION CARD - PERSISTENT STATE */}
+        {/* REFLECTION CARD */}
         <div className="eod-card">
           <h2 className="card-header">How did today feel?</h2>
           <div className="feeling-options">
             <button 
               className={`feeling-btn ${selectedFeeling === 'Calm & steady' ? 'selected' : ''}`}
               onClick={() => selectFeeling('Calm & steady')}
-              disabled={hasSubmitted} // Disable if already submitted
+              disabled={hasSubmitted}
             >
               <svg className="feeling-icon-pro" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
@@ -327,7 +355,7 @@ const EndOfDaySummary = () => {
             <button 
               className={`feeling-btn ${selectedFeeling === 'Balanced' ? 'selected' : ''}`}
               onClick={() => selectFeeling('Balanced')}
-              disabled={hasSubmitted} // Disable if already submitted
+              disabled={hasSubmitted}
             >
               <svg className="feeling-icon-pro" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="12" cy="12" r="10" />
@@ -339,7 +367,7 @@ const EndOfDaySummary = () => {
             <button 
               className={`feeling-btn ${selectedFeeling === 'High-output' ? 'selected' : ''}`}
               onClick={() => selectFeeling('High-output')}
-              disabled={hasSubmitted} // Disable if already submitted
+              disabled={hasSubmitted}
             >
               <svg className="feeling-icon-pro" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
@@ -348,7 +376,6 @@ const EndOfDaySummary = () => {
             </button>
           </div>
           
-          {/* Persistent thank you message - always shows after submission */}
           {hasSubmitted && (
             <div className="feedback-message show">
               <svg className="checkmark" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
