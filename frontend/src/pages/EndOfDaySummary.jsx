@@ -1,20 +1,48 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import '../styles/EndOfDaySummary.css';
 
 const EndOfDaySummary = () => {
   const navigate = useNavigate();
-  const [selectedFeeling, setSelectedFeeling] = useState('High-output');
-  const [showFeedback, setShowFeedback] = useState(true);
+  const [selectedFeeling, setSelectedFeeling] = useState(null);
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [hasSubmitted, setHasSubmitted] = useState(false); // New state to track if user has submitted for the day
   const [tooltipVisible, setTooltipVisible] = useState(null);
 
+  // Check localStorage for existing submission
+  useEffect(() => {
+    const today = new Date().toDateString();
+    const stored = localStorage.getItem('eod_submission');
+    
+    if (stored) {
+      const { date, feeling } = JSON.parse(stored);
+      if (date === today) {
+        setSelectedFeeling(feeling);
+        setHasSubmitted(true);
+        setShowFeedback(true);
+      }
+    }
+  }, []);
+
   const selectFeeling = (feeling) => {
+    // If already submitted for today, don't allow changes
+    if (hasSubmitted) {
+      return;
+    }
+    
     setSelectedFeeling(feeling);
     setShowFeedback(true);
+    setHasSubmitted(true);
     
-    setTimeout(() => {
-      setShowFeedback(false);
-    }, 2000);
+    // Store in localStorage with today's date
+    const today = new Date().toDateString();
+    localStorage.setItem('eod_submission', JSON.stringify({
+      date: today,
+      feeling: feeling
+    }));
+    
+    // Don't auto-hide the thank you message - it stays permanently
+    // The setTimeout has been removed
   };
 
   const handleDone = () => {
@@ -42,7 +70,7 @@ const EndOfDaySummary = () => {
               <line x1="8" y1="2" x2="8" y2="6" />
               <line x1="3" y1="10" x2="21" y2="10" />
             </svg>
-            Friday, Feb 7
+            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
           </div>
           <div className="meta-badge">
             <svg className="meta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -282,13 +310,14 @@ const EndOfDaySummary = () => {
           <p className="pattern-description">Your energy rhythm matches previous productive days.</p>
         </div>
 
-        {/* REFLECTION CARD */}
+        {/* REFLECTION CARD - PERSISTENT STATE */}
         <div className="eod-card">
           <h2 className="card-header">How did today feel?</h2>
           <div className="feeling-options">
             <button 
               className={`feeling-btn ${selectedFeeling === 'Calm & steady' ? 'selected' : ''}`}
               onClick={() => selectFeeling('Calm & steady')}
+              disabled={hasSubmitted} // Disable if already submitted
             >
               <svg className="feeling-icon-pro" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
@@ -298,6 +327,7 @@ const EndOfDaySummary = () => {
             <button 
               className={`feeling-btn ${selectedFeeling === 'Balanced' ? 'selected' : ''}`}
               onClick={() => selectFeeling('Balanced')}
+              disabled={hasSubmitted} // Disable if already submitted
             >
               <svg className="feeling-icon-pro" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="12" cy="12" r="10" />
@@ -309,6 +339,7 @@ const EndOfDaySummary = () => {
             <button 
               className={`feeling-btn ${selectedFeeling === 'High-output' ? 'selected' : ''}`}
               onClick={() => selectFeeling('High-output')}
+              disabled={hasSubmitted} // Disable if already submitted
             >
               <svg className="feeling-icon-pro" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
@@ -316,12 +347,16 @@ const EndOfDaySummary = () => {
               High-output
             </button>
           </div>
-          <div className={`feedback-message ${showFeedback ? 'show' : ''}`}>
-            <svg className="checkmark" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-            Thanks — FlowState will adapt tomorrow
-          </div>
+          
+          {/* Persistent thank you message - always shows after submission */}
+          {hasSubmitted && (
+            <div className="feedback-message show">
+              <svg className="checkmark" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              Thanks — FlowState will adapt tomorrow
+            </div>
+          )}
         </div>
       </div>
 
