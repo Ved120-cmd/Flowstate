@@ -338,7 +338,7 @@ const Questionnaire = () => {
           {error && <p className="error-message">{error}</p>}
 
           {/* Navigation */}
-          <div className="q-navigation">
+          <div className={`q-navigation ${currentStep === 0 ? 'q-navigation-centered' : ''}`}>
             {currentStep > 0 && (
               <button 
                 type="button"
@@ -349,7 +349,7 @@ const Questionnaire = () => {
               </button>
             )}
             
-            <div style={{ flex: 1 }} />
+            {currentStep > 0 && <div style={{ flex: 1 }} />}
             
             <button 
               type="submit"
