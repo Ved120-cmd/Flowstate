@@ -577,6 +577,34 @@ body {
   font-style: italic;
 }
 
+/* Red suggestion (idle/warning) */
+.suggestion-item.red {
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  border-left: 4px solid #ef4444;
+}
+
+.suggestion-item.red .suggestion-icon-wrapper {
+  background: #ef4444;
+}
+
+/* Add icon for Clock */
+.suggestion-icon-wrapper .lucide-clock {
+  color: white;
+}
+/* Red suggestion (idle/warning) */
+.suggestion-item.red {
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  border-left: 4px solid #ef4444;
+}
+
+.suggestion-item.red .suggestion-icon-wrapper {
+  background: #ef4444;
+}
+
+.suggestion-item.red .suggestion-icon {
+  color: white;
+}
+
 .suggestion-loading,
 .suggestion-error {
   font-size: 13px;

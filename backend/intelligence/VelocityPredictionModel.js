@@ -1,287 +1,258 @@
 /**
- * Velocity Prediction Engine
- * Machine Learning model for predicting user productivity velocity
- * This is SEPARATE from the Mongoose VelocityModel schema
+ * Velocity Prediction Model
+ * Simple ML model for predicting user velocity based on activity
  */
 
 class VelocityPredictionModel {
-    constructor(options = {}) {
-      this.learningRate = options.learningRate || 0.1;
-      this.momentum = options.momentum || 0.9;
-      this.decay = options.decay || 0.95;
-      
-      // Feature weights (online learning parameters)
-      this.weights = {
-        hour: 0,
-        dayOfWeek: 0,
-        clicks: 0,
-        keystrokes: 0,
-        mouseMoves: 0,
-        scrolls: 0,
-        taskComplexity: 0,
-        recentCompletions: 0,
-        avgTaskDuration: 0,
-        bias: 5 // Starting bias at middle velocity
-      };
-      
-      // Velocity gradient for momentum
-      this.velocityGradients = {
-        hour: 0,
-        dayOfWeek: 0,
-        clicks: 0,
-        keystrokes: 0,
-        mouseMoves: 0,
-        scrolls: 0,
-        taskComplexity: 0,
-        recentCompletions: 0,
-        avgTaskDuration: 0,
-        bias: 0
-      };
-      
-      // User profile statistics
-      this.userProfile = {
-        baselineVelocity: null,
-        peakHours: [],
-        lowEnergyHours: [],
-        hourlyStats: {}, // hour -> {count, totalVelocity, avgVelocity}
-        totalSamples: 0
-      };
-      
-      // Model metadata
-      this.dataPointsCollected = 0;
+    constructor() {
+      this.dataPoints = [];
       this.isInitialized = false;
-      this.lastTrainingTime = null;
+      this.baselineVelocity = 100;
+      this.peakHours = [];
     }
   
     /**
-     * Normalize feature values to 0-1 range
-     */
-    normalizeFeatures(features) {
-      return {
-        hour: features.hour / 23, // 0-23 hours
-        dayOfWeek: features.dayOfWeek / 6, // 0-6 days
-        clicks: Math.min(features.clicks / 100, 1), // Cap at 100
-        keystrokes: Math.min(features.keystrokes / 600, 1), // Cap at 600
-        mouseMoves: Math.min(features.mouseMoves / 300, 1), // Cap at 300
-        scrolls: Math.min(features.scrolls / 50, 1), // Cap at 50
-        taskComplexity: features.taskComplexity / 5, // 1-5 scale
-        recentCompletions: Math.min(features.recentCompletions / 5, 1), // Cap at 5
-        avgTaskDuration: Math.min(features.avgTaskDuration / 60, 1) // Cap at 60 min
-      };
-    }
-  
-    /**
-     * Make a velocity prediction
-     */
-    predict(features) {
-      const normalized = this.normalizeFeatures(features);
-      
-      // Linear combination of features
-      let prediction = this.weights.bias;
-      
-      for (const [key, value] of Object.entries(normalized)) {
-        prediction += this.weights[key] * value;
-      }
-      
-      // Clamp to 1-10 range
-      prediction = Math.max(1, Math.min(10, Math.round(prediction)));
-      
-      // Determine confidence based on data collected
-      let confidence = 'low';
-      if (this.dataPointsCollected >= 50) {
-        confidence = 'high';
-      } else if (this.dataPointsCollected >= 20) {
-        confidence = 'medium';
-      }
-      
-      // Generate suggestions
-      const suggestions = this.generateSuggestions(features, prediction);
-      
-      return {
-        velocity: prediction,
-        confidence,
-        suggestions,
-        modelState: {
-          dataPoints: this.dataPointsCollected,
-          isInitialized: this.isInitialized
-        }
-      };
-    }
-  
-    /**
-     * Train the model with actual outcome (online learning)
+     * Train the model with new data
      */
     train(features, actualVelocity) {
-      const normalized = this.normalizeFeatures(features);
-      
-      // Current prediction
-      let prediction = this.weights.bias;
-      for (const [key, value] of Object.entries(normalized)) {
-        prediction += this.weights[key] * value;
+      this.dataPoints.push({
+        features,
+        velocity: actualVelocity,
+        timestamp: Date.now()
+      });
+  
+      // Keep only last 100 data points
+      if (this.dataPoints.length > 100) {
+        this.dataPoints = this.dataPoints.slice(-100);
       }
-      
-      // Calculate error
-      const error = actualVelocity - prediction;
-      
-      // Update weights with gradient descent + momentum
-      for (const [key, value] of Object.entries(normalized)) {
-        // Calculate gradient
-        const gradient = error * value;
-        
-        // Apply momentum
-        this.velocityGradients[key] = 
-          this.momentum * this.velocityGradients[key] + 
-          this.learningRate * gradient;
-        
-        // Update weight
-        this.weights[key] += this.velocityGradients[key];
+  
+      // Update baseline velocity (average of all velocities)
+      const velocities = this.dataPoints.map(d => d.velocity);
+      this.baselineVelocity = velocities.reduce((a, b) => a + b, 0) / velocities.length;
+  
+      // Mark as initialized after 10 data points
+      if (this.dataPoints.length >= 10) {
+        this.isInitialized = true;
       }
-      
-      // Update bias
-      const biasGradient = error;
-      this.velocityGradients.bias = 
-        this.momentum * this.velocityGradients.bias + 
-        this.learningRate * biasGradient;
-      this.weights.bias += this.velocityGradients.bias;
-      
-      // Apply weight decay to prevent overfitting
-      for (const key in this.weights) {
-        if (key !== 'bias') {
-          this.weights[key] *= this.decay;
+  
+      // Find peak hours
+      this.updatePeakHours();
+  
+      console.log('🎓 Model trained. Data points:', this.dataPoints.length);
+    }
+  
+    /**
+     * Predict velocity based on features
+     */
+    predict(features) {
+      if (!this.isInitialized || this.dataPoints.length < 10) {
+        // Not enough data - calculate based on activity
+        const activityIntensity = 
+          (features.clicks || 0) + 
+          (features.keystrokes || 0) * 2 + 
+          (features.mouseMoves || 0) * 0.05 + 
+          (features.scrolls || 0) * 1.5;
+  
+        let velocity = 100;
+        
+        // HIGH ACTIVITY = HIGH VELOCITY
+        if (activityIntensity > 300) {
+          velocity = 95 + Math.floor(Math.random() * 6);
+        } else if (activityIntensity > 150) {
+          velocity = 85 + Math.floor(Math.random() * 10);
+        } else if (activityIntensity > 80) {
+          velocity = 70 + Math.floor(Math.random() * 15);
+        } else if (activityIntensity > 30) {
+          velocity = 50 + Math.floor(Math.random() * 20);
+        } else if (activityIntensity > 5) {
+          velocity = 30 + Math.floor(Math.random() * 20);
+        } else {
+          velocity = 10 + Math.floor(Math.random() * 20);
         }
+  
+        return {
+          velocity: Math.round(velocity),
+          confidence: 0.3,
+          suggestions: this.generateSuggestions(features, velocity)
+        };
       }
-      
-      // Update user profile statistics
-      this.updateUserProfile(features, actualVelocity);
-      
-      // Update metadata
-      this.dataPointsCollected++;
-      this.isInitialized = true;
-      this.lastTrainingTime = new Date();
-      
+  
+      // ML prediction (when model is trained)
+      const activityIntensity = 
+        (features.clicks || 0) + 
+        (features.keystrokes || 0) * 2 + 
+        (features.mouseMoves || 0) * 0.05 + 
+        (features.scrolls || 0) * 1.5;
+  
+      let predictedVelocity = this.baselineVelocity;
+  
+      // Adjust based on current activity vs baseline
+      if (activityIntensity > 300) {
+        predictedVelocity = Math.min(100, this.baselineVelocity + 15);
+      } else if (activityIntensity > 150) {
+        predictedVelocity = Math.min(100, this.baselineVelocity + 5);
+      } else if (activityIntensity > 80) {
+        predictedVelocity = this.baselineVelocity;
+      } else if (activityIntensity > 30) {
+        predictedVelocity = Math.max(40, this.baselineVelocity - 15);
+      } else if (activityIntensity > 5) {
+        predictedVelocity = Math.max(25, this.baselineVelocity - 25);
+      } else {
+        predictedVelocity = Math.max(10, this.baselineVelocity - 35);
+      }
+  
+      // Generate suggestions
+      const suggestions = this.generateSuggestions(features, predictedVelocity);
+  
       return {
-        error,
-        updatedWeights: { ...this.weights }
+        velocity: Math.round(predictedVelocity),
+        confidence: this.isInitialized ? 0.8 : 0.5,
+        suggestions
       };
     }
   
     /**
-     * Update user profile with new data
+     * Generate personalized suggestions
      */
-    updateUserProfile(features, velocity) {
-      const hour = features.hour;
-      
-      // Initialize hour stats if needed
-      if (!this.userProfile.hourlyStats[hour]) {
-        this.userProfile.hourlyStats[hour] = {
-          count: 0,
-          totalVelocity: 0,
-          avgVelocity: 0
-        };
+    generateSuggestions(features, velocity) {
+      const suggestions = [];
+      const hour = features.hour || new Date().getHours();
+      const activityIntensity = 
+        (features.clicks || 0) + 
+        (features.keystrokes || 0) * 2 + 
+        (features.mouseMoves || 0) * 0.05 + 
+        (features.scrolls || 0) * 1.5;
+  
+      console.log('🤔 Generating suggestions:', {
+        velocity,
+        hour,
+        activityIntensity,
+        isPeakHour: this.peakHours.includes(hour)
+      });
+  
+      // 1. Low velocity/activity suggestion
+      if (velocity < 60) {
+        suggestions.push({
+          type: 'TAKE_BREAK',
+          priority: 'high',
+          message: velocity < 40 
+            ? 'Your energy is very low. Take a 10-minute break to recharge.'
+            : 'Your focus seems to be drifting. A short break might help.',
+          duration: velocity < 40 ? 10 : 5
+        });
+        console.log('✅ Added TAKE_BREAK suggestion (low velocity)');
       }
-      
-      // Update hourly statistics
-      const hourStats = this.userProfile.hourlyStats[hour];
-      hourStats.count++;
-      hourStats.totalVelocity += velocity;
-      hourStats.avgVelocity = hourStats.totalVelocity / hourStats.count;
-      
-      // Update total samples
-      this.userProfile.totalSamples++;
-      
-      // Calculate baseline velocity (overall average)
-      let totalVelocity = 0;
-      let totalCount = 0;
-      for (const stats of Object.values(this.userProfile.hourlyStats)) {
-        totalVelocity += stats.totalVelocity;
-        totalCount += stats.count;
-      }
-      this.userProfile.baselineVelocity = totalCount > 0 
-        ? Math.round((totalVelocity / totalCount) * 10) / 10 
-        : null;
-      
-      // Identify peak hours (above baseline)
-      if (this.userProfile.baselineVelocity && totalCount >= 10) {
-        const peakThreshold = this.userProfile.baselineVelocity + 1;
-        const lowThreshold = this.userProfile.baselineVelocity - 1;
-        
-        this.userProfile.peakHours = [];
-        this.userProfile.lowEnergyHours = [];
-        
-        for (const [hour, stats] of Object.entries(this.userProfile.hourlyStats)) {
-          if (stats.count >= 2) { // Need at least 2 samples
-            if (stats.avgVelocity >= peakThreshold) {
-              this.userProfile.peakHours.push(parseInt(hour));
-            } else if (stats.avgVelocity <= lowThreshold) {
-              this.userProfile.lowEnergyHours.push(parseInt(hour));
-            }
-          }
+  
+      // 2. Extended work session without break
+      if (activityIntensity > 200 && this.dataPoints.length > 0) {
+        const recentDataPoints = this.dataPoints.slice(-6);
+        const allHighActivity = recentDataPoints.every(dp => {
+          const intensity = (dp.features.clicks || 0) + (dp.features.keystrokes || 0) * 2;
+          return intensity > 100;
+        });
+  
+        if (allHighActivity && recentDataPoints.length >= 6) {
+          suggestions.push({
+            type: 'TAKE_BREAK',
+            priority: 'high',
+            message: 'You\'ve been working intensely for a while. Take a break to maintain productivity.',
+            duration: 10
+          });
+          console.log('✅ Added TAKE_BREAK suggestion (extended work)');
         }
-        
-        // Sort hours
-        this.userProfile.peakHours.sort((a, b) => a - b);
-        this.userProfile.lowEnergyHours.sort((a, b) => a - b);
       }
+  
+      // 3. Peak hour suggestion
+      if (this.peakHours.includes(hour) && velocity > 70) {
+        suggestions.push({
+          type: 'PEAK_HOUR',
+          priority: 'medium',
+          message: `You're in a peak productivity hour (${hour}:00)! Great time to tackle complex tasks.`,
+        });
+        console.log('✅ Added PEAK_HOUR suggestion');
+      }
+  
+      // 4. Afternoon energy dip (2pm-4pm)
+      if (hour >= 14 && hour <= 16) {
+        if (velocity < 70) {
+          suggestions.push({
+            type: 'LOW_ENERGY_HOUR',
+            priority: 'high',
+            message: 'Afternoon energy dip detected. Try a quick walk, stretch, or healthy snack.',
+            duration: 5
+          });
+          console.log('✅ Added LOW_ENERGY_HOUR suggestion');
+        } else {
+          suggestions.push({
+            type: 'MAINTAIN_ENERGY',
+            priority: 'low',
+            message: 'You\'re doing well through the afternoon slump! Keep it up.',
+          });
+          console.log('✅ Added MAINTAIN_ENERGY suggestion');
+        }
+      }
+  
+      // 5. Late night work warning (after 9pm)
+      if (hour >= 21 || hour <= 5) {
+        suggestions.push({
+          type: 'LATE_WORK',
+          priority: 'medium',
+          message: 'Working late? Remember to get adequate rest for tomorrow.',
+        });
+        console.log('✅ Added LATE_WORK suggestion');
+      }
+  
+      // 6. Very low activity - idle too long
+      if (activityIntensity < 10 && velocity < 50) {
+        suggestions.push({
+          type: 'IDLE_WARNING',
+          priority: 'medium',
+          message: 'You seem idle. If taking a break, great! If not, maybe time to re-engage.',
+        });
+        console.log('✅ Added IDLE_WARNING suggestion');
+      }
+  
+      // 7. Morning motivation (6am-10am)
+      if (hour >= 6 && hour <= 10 && velocity > 80) {
+        suggestions.push({
+          type: 'MORNING_BOOST',
+          priority: 'low',
+          message: 'Great morning energy! Excellent time for creative or challenging work.',
+        });
+        console.log('✅ Added MORNING_BOOST suggestion');
+      }
+  
+      console.log(`📋 Total suggestions generated: ${suggestions.length}`);
+      
+      return suggestions;
     }
   
     /**
-     * Generate contextual suggestions
+     * Update peak hours based on historical data
      */
-    generateSuggestions(features, predictedVelocity) {
-      const suggestions = [];
-      const hour = features.hour;
+    updatePeakHours() {
+      if (this.dataPoints.length < 20) return;
+  
+      const hourlyVelocities = {};
       
-      // Low velocity suggestions
-      if (predictedVelocity <= 3) {
-        suggestions.push({
-          type: 'break_reminder',
-          message: 'Your velocity is low. Consider taking a break or switching tasks.',
-          action: 'take_break',
-          priority: 'high'
-        });
-      }
-      
-      // Peak hour reminder
-      if (this.userProfile.peakHours.includes(hour)) {
-        suggestions.push({
-          type: 'peak_hour',
-          message: 'This is one of your peak productivity hours! Great time for complex tasks.',
-          action: 'tackle_hard_tasks',
-          priority: 'medium'
-        });
-      }
-      
-      // Low energy hour warning
-      if (this.userProfile.lowEnergyHours.includes(hour)) {
-        suggestions.push({
-          type: 'low_energy_hour',
-          message: 'This tends to be a low-energy hour for you. Consider lighter tasks.',
-          action: 'do_simple_tasks',
-          priority: 'medium'
-        });
-      }
-      
-      // High activity without breaks
-      if (features.clicks > 80 || features.keystrokes > 500) {
-        suggestions.push({
-          type: 'activity_warning',
-          message: "You've been very active. Remember to take regular breaks.",
-          action: 'take_break',
-          priority: 'medium'
-        });
-      }
-      
-      // High velocity - encourage continuation
-      if (predictedVelocity >= 8) {
-        suggestions.push({
-          type: 'flow_state',
-          message: "You're in a high-velocity flow state! Keep up the momentum.",
-          action: 'continue_focus',
-          priority: 'low'
-        });
-      }
-      
-      return suggestions;
+      this.dataPoints.forEach(dp => {
+        const hour = dp.features.hour;
+        if (hour !== undefined) {
+          if (!hourlyVelocities[hour]) {
+            hourlyVelocities[hour] = [];
+          }
+          hourlyVelocities[hour].push(dp.velocity);
+        }
+      });
+  
+      // Find top 3 hours
+      const avgByHour = Object.entries(hourlyVelocities).map(([hour, velocities]) => ({
+        hour: parseInt(hour),
+        avg: velocities.reduce((a, b) => a + b, 0) / velocities.length
+      }));
+  
+      avgByHour.sort((a, b) => b.avg - a.avg);
+      this.peakHours = avgByHour.slice(0, 3).map(h => h.hour);
     }
   
     /**
@@ -290,50 +261,15 @@ class VelocityPredictionModel {
     getModelStats() {
       return {
         isInitialized: this.isInitialized,
-        dataPointsCollected: this.dataPointsCollected,
-        lastTrainingTime: this.lastTrainingTime,
+        dataPointsCollected: this.dataPoints.length,
         userProfile: {
-          baselineVelocity: this.userProfile.baselineVelocity,
-          peakHours: this.userProfile.peakHours,
-          lowEnergyHours: this.userProfile.lowEnergyHours,
-          totalSamples: this.userProfile.totalSamples
+          baselineVelocity: Math.round(this.baselineVelocity),
+          peakHours: this.peakHours
         },
-        weights: { ...this.weights }
+        peakHours: this.peakHours,
+        baselineVelocity: Math.round(this.baselineVelocity)
       };
-    }
-  
-    /**
-     * Export model state for persistence
-     */
-    exportState() {
-      return {
-        weights: this.weights,
-        velocityGradients: this.velocityGradients,
-        userProfile: this.userProfile,
-        dataPointsCollected: this.dataPointsCollected,
-        isInitialized: this.isInitialized,
-        lastTrainingTime: this.lastTrainingTime,
-        learningRate: this.learningRate,
-        momentum: this.momentum,
-        decay: this.decay
-      };
-    }
-  
-    /**
-     * Import model state from persistence
-     */
-    importState(state) {
-      this.weights = state.weights || this.weights;
-      this.velocityGradients = state.velocityGradients || this.velocityGradients;
-      this.userProfile = state.userProfile || this.userProfile;
-      this.dataPointsCollected = state.dataPointsCollected || 0;
-      this.isInitialized = state.isInitialized || false;
-      this.lastTrainingTime = state.lastTrainingTime ? new Date(state.lastTrainingTime) : null;
-      this.learningRate = state.learningRate || this.learningRate;
-      this.momentum = state.momentum || this.momentum;
-      this.decay = state.decay || this.decay;
     }
   }
   
-  // CRITICAL: Proper CommonJS export
   module.exports = VelocityPredictionModel;

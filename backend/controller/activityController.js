@@ -24,10 +24,6 @@ function getVelocityModel() {
  * Record user activity and update ML model
  * POST /api/activity
  */
-/**
- * Record user activity and update ML model
- * POST /api/activity
- */
 exports.recordActivity = async (req, res) => {
   try {
     const {
@@ -74,26 +70,41 @@ exports.recordActivity = async (req, res) => {
 
     await activityLog.save();
 
-    // ✅ Calculate velocity based on activity intensity
+    // ✅ Calculate activity intensity
     const activityIntensity = clicks + (keystrokes * 2) + (mouseMoves * 0.05) + (scrolls * 1.5);
     
-    // ✅ High activity = high velocity (90-100%)
-    // ✅ Medium activity = medium velocity (70-89%)
-    // ✅ Low activity = low velocity (50-69%)
-    // ✅ Idle = very low velocity (0-49%)
+    console.log('🔥 Activity intensity:', activityIntensity);
     
-    let velocity = 100; // Default to 100%
+    // ✅ HIGH ACTIVITY = HIGH VELOCITY (stays near 100%)
+    // ✅ LOW ACTIVITY = VELOCITY DECREASES
+    // ✅ IDLE = VELOCITY DROPS SIGNIFICANTLY
+    
+    let velocity = 100; // Start at maximum
     
     if (activityIntensity > 300) {
+      // Very high activity - maintain peak velocity
       velocity = 95 + Math.floor(Math.random() * 6); // 95-100%
+      console.log('⚡ Very high activity detected');
     } else if (activityIntensity > 150) {
-      velocity = 80 + Math.floor(Math.random() * 15); // 80-94%
-    } else if (activityIntensity > 50) {
-      velocity = 60 + Math.floor(Math.random() * 20); // 60-79%
-    } else if (activityIntensity > 10) {
-      velocity = 40 + Math.floor(Math.random() * 20); // 40-59%
+      // High activity - good velocity
+      velocity = 85 + Math.floor(Math.random() * 10); // 85-94%
+      console.log('🔥 High activity detected');
+    } else if (activityIntensity > 80) {
+      // Medium activity - decent velocity
+      velocity = 70 + Math.floor(Math.random() * 15); // 70-84%
+      console.log('💪 Medium activity detected');
+    } else if (activityIntensity > 30) {
+      // Low activity - velocity dropping
+      velocity = 50 + Math.floor(Math.random() * 20); // 50-69%
+      console.log('📉 Low activity detected');
+    } else if (activityIntensity > 5) {
+      // Very low activity - significant drop
+      velocity = 30 + Math.floor(Math.random() * 20); // 30-49%
+      console.log('⚠️ Very low activity detected');
     } else {
-      velocity = 10 + Math.floor(Math.random() * 30); // 10-39%
+      // Idle/no activity - velocity drops to minimum
+      velocity = 10 + Math.floor(Math.random() * 20); // 10-29%
+      console.log('😴 Idle detected');
     }
 
     // Get velocity model for ML predictions
@@ -136,8 +147,8 @@ exports.recordActivity = async (req, res) => {
     // Get ML prediction
     const prediction = model.predict(features);
     
-    // ✅ Use ML prediction if model is trained, otherwise use activity-based velocity
-    const finalVelocity = model.getModelStats().isInitialized 
+    // ✅ Use activity-based velocity initially, then ML when trained
+    const finalVelocity = model.getModelStats().isInitialized && model.getModelStats().dataPointsCollected > 20
       ? prediction.velocity 
       : velocity;
 
@@ -145,8 +156,83 @@ exports.recordActivity = async (req, res) => {
       activityIntensity,
       activityBasedVelocity: velocity,
       mlPrediction: prediction.velocity,
-      finalVelocity
+      finalVelocity,
+      mlInitialized: model.getModelStats().isInitialized
     });
+
+    // ✅ FORCE SUGGESTIONS FOR TESTING (generates suggestions based on current state)
+    if (!prediction.suggestions || prediction.suggestions.length === 0) {
+      const testSuggestions = [];
+      
+      // Low velocity suggestion
+      if (finalVelocity < 60) {
+        testSuggestions.push({
+          type: 'TAKE_BREAK',
+          priority: 'high',
+          message: finalVelocity < 40 
+            ? 'Your energy is very low. Take a 10-minute break to recharge.'
+            : 'Your focus seems to be drifting. A short break might help.',
+          duration: finalVelocity < 40 ? 10 : 5
+        });
+        console.log('✅ Added TAKE_BREAK suggestion (low velocity)');
+      }
+      
+      // High activity suggestion
+      if (activityIntensity > 200) {
+        testSuggestions.push({
+          type: 'PEAK_HOUR',
+          priority: 'medium',
+          message: 'High activity detected! You\'re in the zone.',
+        });
+        console.log('✅ Added PEAK_HOUR suggestion (high activity)');
+      }
+      
+      // Afternoon dip suggestion (2pm-4pm)
+      if (hour >= 14 && hour <= 16) {
+        testSuggestions.push({
+          type: 'LOW_ENERGY_HOUR',
+          priority: 'medium',
+          message: 'Afternoon energy dip time. A quick walk or snack might help.',
+          duration: 5
+        });
+        console.log('✅ Added LOW_ENERGY_HOUR suggestion (afternoon)');
+      }
+      
+      // Late night warning
+      if (hour >= 21 || hour <= 5) {
+        testSuggestions.push({
+          type: 'LATE_WORK',
+          priority: 'medium',
+          message: 'Working late? Remember to get adequate rest for tomorrow.',
+        });
+        console.log('✅ Added LATE_WORK suggestion');
+      }
+      
+      // Morning motivation
+      if (hour >= 6 && hour <= 10 && finalVelocity > 80) {
+        testSuggestions.push({
+          type: 'MORNING_BOOST',
+          priority: 'low',
+          message: 'Great morning energy! This is an excellent time for challenging work.',
+        });
+        console.log('✅ Added MORNING_BOOST suggestion');
+      }
+      
+      // Idle warning
+      if (activityIntensity < 10 && finalVelocity < 50) {
+        testSuggestions.push({
+          type: 'IDLE_WARNING',
+          priority: 'medium',
+          message: 'You seem idle. If you\'re taking a break, great! If not, maybe time to re-engage.',
+        });
+        console.log('✅ Added IDLE_WARNING suggestion');
+      }
+      
+      if (testSuggestions.length > 0) {
+        prediction.suggestions = testSuggestions;
+        console.log(`🧪 Generated ${testSuggestions.length} suggestions`);
+      }
+    }
 
     // Get model statistics
     const modelStats = model.getModelStats();
@@ -159,7 +245,7 @@ exports.recordActivity = async (req, res) => {
       suggestions: prediction.suggestions,
       mlModelStatus: {
         ...modelStats,
-        baselineVelocity: finalVelocity // ✅ Update baseline
+        baselineVelocity: finalVelocity
       },
       activityLog: {
         id: activityLog._id,
@@ -173,6 +259,65 @@ exports.recordActivity = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to record activity',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Record task start
+ * POST /api/activity/task/start
+ */
+exports.recordTaskStart = async (req, res) => {
+  try {
+    const { taskId, complexity = 3 } = req.body;
+    const userId = req.user?._id || req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User not authenticated' });
+    }
+
+    const activityLog = new ActivityLog({
+      userId,
+      activityType: 'task_start',
+      taskId,
+      taskComplexity: complexity,
+      timestamp: new Date()
+    });
+
+    await activityLog.save();
+
+    // Get current velocity prediction
+    const model = getVelocityModel();
+    const now = new Date();
+    
+    const features = {
+      hour: now.getHours(),
+      dayOfWeek: now.getDay(),
+      clicks: 0,
+      keystrokes: 0,
+      mouseMoves: 0,
+      scrolls: 0,
+      taskComplexity: complexity,
+      recentCompletions: 0,
+      avgTaskDuration: 30
+    };
+
+    const prediction = model.predict(features);
+
+    res.status(200).json({
+      success: true,
+      message: 'Task started',
+      velocity: prediction.velocity,
+      taskId,
+      startTime: activityLog.timestamp
+    });
+
+  } catch (error) {
+    console.error('❌ Error starting task:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to start task',
       error: error.message
     });
   }
@@ -213,7 +358,7 @@ exports.recordTaskComplete = async (req, res) => {
     const recentActivity = await ActivityLog.findOne({
       userId,
       activityType: { $in: ['activity', 'active'] },
-      timestamp: { $gte: new Date(Date.now() - 10 * 60 * 1000) } // Last 10 minutes
+      timestamp: { $gte: new Date(Date.now() - 10 * 60 * 1000) }
     }).sort({ timestamp: -1 });
 
     const features = {
@@ -229,7 +374,6 @@ exports.recordTaskComplete = async (req, res) => {
     };
 
     // Calculate actual velocity based on performance
-    // Lower duration = higher velocity
     const actualVelocity = Math.max(1, Math.min(10, Math.round(
       10 - (duration / 10) + (complexity / 2)
     )));
@@ -277,14 +421,6 @@ exports.recordTaskComplete = async (req, res) => {
  * Get personalized velocity
  * GET /api/velocity/personalized
  */
-/**
- * Get personalized velocity
- * GET /api/velocity/personalized
- */
-/**
- * Get personalized velocity
- * GET /api/velocity/personalized
- */
 exports.getPersonalizedVelocity = async (req, res) => {
   try {
     const userId = req.user?._id || req.user?.id;
@@ -326,7 +462,7 @@ exports.getPersonalizedVelocity = async (req, res) => {
     const prediction = model.predict(features);
     const modelStats = model.getModelStats();
 
-    // ✅ If no recent activity, return 100% velocity
+    // If no recent activity, return 100% velocity
     const velocity = recentActivity ? prediction.velocity : 100;
 
     res.status(200).json({
@@ -336,7 +472,7 @@ exports.getPersonalizedVelocity = async (req, res) => {
       suggestions: prediction.suggestions,
       mlModelStatus: {
         ...modelStats,
-        baselineVelocity: velocity // ✅ Set baseline to current velocity
+        baselineVelocity: velocity
       },
       currentContext: {
         hour: features.hour,
