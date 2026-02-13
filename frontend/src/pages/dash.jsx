@@ -53,13 +53,6 @@ const Dash = () => {
   } = useMLVelocity({
     pollingInterval: 10000, // 10 seconds
     autoStart: true,
-    onSuggestion: (suggestions) => {
-      console.log('📬 New ML suggestions:', suggestions);
-      // Show toast for high-priority suggestions
-      if (suggestions.some(s => s.priority === 'high')) {
-        setShowToast(true);
-      }
-    },
     onVelocityChange: (newVel, oldVel) => {
       console.log(`📊 Velocity updated: ${oldVel?.toFixed(1)} → ${newVel.toFixed(1)}`);
     }
@@ -78,6 +71,9 @@ const Dash = () => {
   const [displayName, setDisplayName] = useState('');
   const [dismissedSuggestions, setDismissedSuggestions] = useState(new Set());
   const [lastDismissTime, setLastDismissTime] = useState(null);
+  const [quietMode, setQuietMode] = useState(false);
+  const [previousVelocity, setPreviousVelocity] = useState(null);
+  const [velocityTrend, setVelocityTrend] = useState('stable'); // 'rising', 'falling', 'stable'
   
   const [newTask, setNewTask] = useState({
     title: '',
@@ -106,12 +102,38 @@ const Dash = () => {
     { time: '5pm', focus: 20 },
   ];
 
-  // Sync energy with ML velocity
+  // Sync energy with ML velocity and track trend
   useEffect(() => {
     if (mlVelocity !== null && !isNaN(mlVelocity)) {
-      setEnergy(Math.round(Math.min(100, Math.max(0, mlVelocity))));
+      const newEnergy = Math.round(Math.min(100, Math.max(0, mlVelocity)));
+      setEnergy(newEnergy);
+      
+      // Track velocity trend relative to baseline
+      if (modelState.isInitialized && modelState.baselineVelocity) {
+        const baseline = modelState.baselineVelocity;
+        const diff = mlVelocity - baseline;
+        
+        if (diff > 5) {
+          setVelocityTrend('rising'); // Above baseline
+        } else if (diff < -5) {
+          setVelocityTrend('falling'); // Below baseline
+        } else {
+          setVelocityTrend('stable'); // Near baseline
+        }
+      } else if (previousVelocity !== null) {
+        // Fallback to simple trend if baseline not ready
+        const diff = mlVelocity - previousVelocity;
+        if (diff > 5) {
+          setVelocityTrend('rising');
+        } else if (diff < -5) {
+          setVelocityTrend('falling');
+        } else {
+          setVelocityTrend('stable');
+        }
+      }
+      setPreviousVelocity(mlVelocity);
     }
-  }, [mlVelocity]);
+  }, [mlVelocity, previousVelocity, modelState.isInitialized, modelState.baselineVelocity]);
 
   // Load user preferences and display name on component mount
   useEffect(() => {
@@ -170,32 +192,79 @@ const Dash = () => {
     };
   }, [flowLock, inMeeting]);
 
-  const handleAcceptSuggestion = async () => {
-    setShowToast(false);
-    setLastDismissTime(Date.now());
+  // Auto-show toast only when velocity drops below baseline
+  useEffect(() => {
+    // Don't show notifications in quiet mode
+    if (quietMode) {
+      setShowToast(false);
+      return;
+    }
     
-    if (mlSuggestions?.length > 0) {
-      setDismissedSuggestions(prev => new Set([...prev, mlSuggestions[0].type]));
-      await recordFeedback(mlSuggestions[0].type, true);
+    // Only show notification if velocity is below baseline and we have suggestions
+    if (mlSuggestions && mlSuggestions.length > 0 && !flowLock && !inMeeting && modelState.isInitialized) {
+      const baselineVelocity = modelState.baselineVelocity || 75;
+      const isBelowBaseline = mlVelocity !== null && mlVelocity < baselineVelocity;
       
-      // Clear after 5 minutes
+      // Check if there are non-dismissed suggestions
+      const hasNonDismissedSuggestions = mlSuggestions.some(s => !dismissedSuggestions.has(s.type));
+      
+      // Add cooldown: don't show toast if user just dismissed one within last 2 minutes
+      const timeSinceLastDismiss = lastDismissTime ? Date.now() - lastDismissTime : Infinity;
+      const cooldownPeriod = 2 * 60 * 1000; // 2 minutes
+      
+      if (isBelowBaseline && hasNonDismissedSuggestions && timeSinceLastDismiss > cooldownPeriod) {
+        setShowToast(true);
+      } else {
+        setShowToast(false);
+      }
+    } else {
+      setShowToast(false);
+    }
+  }, [mlSuggestions, dismissedSuggestions, flowLock, inMeeting, lastDismissTime, quietMode, mlVelocity, modelState.isInitialized, modelState.baselineVelocity]);
+
+  const handleAcceptSuggestion = async () => {
+    if (mlSuggestions?.length > 0) {
+      const suggestionType = mlSuggestions[0].type;
+      
+      // Immediately dismiss from UI
+      setDismissedSuggestions(prev => new Set([...prev, suggestionType]));
+      setLastDismissTime(Date.now());
+      
+      // Record positive feedback to ML model
+      await recordFeedback(suggestionType, true);
+      
+      // Clear after 10 minutes to allow new suggestions
       setTimeout(() => {
         setDismissedSuggestions(prev => {
           const newSet = new Set(prev);
-          newSet.delete(mlSuggestions[0].type);
+          newSet.delete(suggestionType);
           return newSet;
         });
-      }, 5 * 60 * 1000);
+      }, 10 * 60 * 1000);
+      
+      setEnergy(prev => Math.min(prev + 5, 100));
     }
-    
-    setEnergy(prev => Math.min(prev + 5, 100));
   };
 
   const handleDismiss = async () => {
-    setShowToast(false);
-    // Record rejection to ML model
-    if (mlSuggestions && mlSuggestions.length > 0) {
-      await recordFeedback(mlSuggestions[0].type, false);
+    if (mlSuggestions?.length > 0) {
+      const suggestionType = mlSuggestions[0].type;
+      
+      // Dismiss from UI and mark as dismissed
+      setDismissedSuggestions(prev => new Set([...prev, suggestionType]));
+      setLastDismissTime(Date.now());
+      
+      // Record rejection to ML model
+      await recordFeedback(suggestionType, false);
+      
+      // Clear after 15 minutes to give it another chance
+      setTimeout(() => {
+        setDismissedSuggestions(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(suggestionType);
+          return newSet;
+        });
+      }, 15 * 60 * 1000);
     }
   };
 
@@ -214,7 +283,6 @@ const Dash = () => {
         if (flowLock) {
           setFlowLock(false);
         }
-        setShowToast(false);
       }
     }
   };
@@ -295,9 +363,6 @@ const Dash = () => {
   const toggleFlowLock = () => {
     if (inMeeting) return;
     setFlowLock(!flowLock);
-    if (!flowLock) {
-      setShowToast(false);
-    }
   };
 
   const formatTime = (seconds) => {
@@ -315,8 +380,10 @@ const Dash = () => {
 
   const showMeetingButton = workMode === 'office' || workMode === 'hybrid';
 
-  // Use ML suggestions if available
-  const displaySuggestions = mlSuggestions && mlSuggestions.length > 0 ? mlSuggestions : [];
+  // Filter out dismissed suggestions and use ML suggestions if available
+  const displaySuggestions = mlSuggestions && mlSuggestions.length > 0 
+    ? mlSuggestions.filter(s => !dismissedSuggestions.has(s.type))
+    : [];
 
   // Empty state component for when no tasks exist
   const EmptyTaskState = () => (
@@ -380,8 +447,8 @@ const Dash = () => {
         </div>
       )}
 
-      {/* TOAST NOTIFICATION - Now using ML suggestions */}
-      {showToast && !flowLock && !inMeeting && displaySuggestions.length > 0 && tasks.length > 0 && (
+      {/* TOAST NOTIFICATION - Now using ML suggestions with proper filtering */}
+      {showToast && !flowLock && !inMeeting && displaySuggestions.length > 0 && (
         <div className="toast-notification">
           <div className="toast-content">
             <div className="toast-icon-wrapper">
@@ -455,7 +522,7 @@ const Dash = () => {
         <header className="dashboard-header">
           <div className="header-greeting">
             <div className="greeting-content">
-              <h1 className="header-title">Welcome back, {displayName || 'there'}</h1>
+              <h1 className="header-title">Welcome, {displayName || 'there'}</h1>
               <div className="header-nudge">
                 <Heart className="nudge-icon" style={{ width: '16px', height: '16px', color: '#88c9a1' }} />
                 {nudges[nudgeIndex]}
@@ -491,6 +558,27 @@ const Dash = () => {
                 <span>ML Active</span>
               </>
             )}
+            <span className="divider">•</span>
+            <button 
+              onClick={() => setQuietMode(!quietMode)}
+              style={{
+                background: quietMode ? '#e6b89c' : '#88c9a1',
+                border: 'none',
+                borderRadius: '12px',
+                padding: '4px 10px',
+                fontSize: '12px',
+                color: 'white',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontWeight: 500,
+                transition: 'all 0.2s ease'
+              }}
+            >
+              {quietMode ? '🔕' : '🔔'}
+              <span>{quietMode ? 'Quiet' : 'Alerts On'}</span>
+            </button>
           </div>
         </header>
       )}
@@ -537,6 +625,15 @@ const Dash = () => {
                   <div className="energy-label">
                     {mlLoading ? 'Loading...' : 'Velocity'}
                   </div>
+                  {velocityTrend !== 'stable' && (
+                    <div style={{ 
+                      fontSize: '18px', 
+                      marginTop: '4px',
+                      color: velocityTrend === 'rising' ? '#88c9a1' : '#e6b89c'
+                    }}>
+                      {velocityTrend === 'rising' ? '↗' : '↘'}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -556,7 +653,11 @@ const Dash = () => {
                   <div className="stat-dot yellow"></div>
                   <div className="stat-info">
                     <span className="stat-title">Current</span>
-                    <span className="stat-value">Steady Flow</span>
+                    <span className="stat-value">
+                      {velocityTrend === 'rising' ? '↗ Rising' : 
+                       velocityTrend === 'falling' ? '↘ Falling' : 
+                       'Steady Flow'}
+                    </span>
                   </div>
                 </div>
                 <div className="energy-stat-item">
@@ -570,6 +671,23 @@ const Dash = () => {
                     </span>
                   </div>
                 </div>
+                {modelState.isInitialized && modelState.baselineVelocity && mlVelocity < modelState.baselineVelocity && (
+                  <div style={{
+                    gridColumn: '1 / -1',
+                    marginTop: '8px',
+                    padding: '8px 12px',
+                    background: 'rgba(230, 184, 156, 0.1)',
+                    borderRadius: '8px',
+                    fontSize: '12px',
+                    color: '#e6b89c',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}>
+                    <AlertCircle size={14} />
+                    <span>Below baseline - consider taking a break</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
