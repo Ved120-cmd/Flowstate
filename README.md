@@ -40,6 +40,12 @@ The system continuously analyzes **work velocity, idle time, and error patterns*
 
 ---
 
+## 🎥 Demo
+
+**Video Link:** https://drive.google.com/file/d/1pWJn_oRzD7Rgg1sPk7yHRhvX0TW5xl7D/view?usp=sharing
+
+---
+
 ## 🧠 Core Capabilities
 
 | Feature | Description |
